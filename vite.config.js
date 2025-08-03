@@ -5,16 +5,24 @@ export default defineConfig(({ command, mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
   
+  const serverPort = env.PORT || 3002;
+  console.log(`🔧 Vite proxy configuration: PORT=${env.PORT}, proxying /api to http://localhost:${serverPort}`);
   
   return {
     plugins: [react()],
     server: {
       port: parseInt(env.VITE_PORT) || 3001,
+      host: '0.0.0.0', // Allow external connections
       proxy: {
-        '/api': `http://localhost:${env.PORT || 3002}`,
+        '/api': {
+          target: `http://localhost:${serverPort}`,
+          changeOrigin: true,
+          secure: false
+        },
         '/ws': {
-          target: `ws://localhost:${env.PORT || 3002}`,
-          ws: true
+          target: `ws://localhost:${serverPort}`,
+          ws: true,
+          changeOrigin: true
         }
       }
     },

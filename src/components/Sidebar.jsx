@@ -4,10 +4,11 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Search, GitBranch } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
+import ProjectPickerModal from './ProjectPickerModal';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -50,13 +51,13 @@ function Sidebar({
   updateAvailable,
   latestVersion,
   currentVersion,
-  onShowVersionModal
+  onShowVersionModal,
+  messages
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
-  const [showNewProject, setShowNewProject] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [editingName, setEditingName] = useState('');
-  const [newProjectPath, setNewProjectPath] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState({});
   const [additionalSessions, setAdditionalSessions] = useState({});
@@ -68,18 +69,7 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
-
-  
-  // Starred projects state - persisted in localStorage
-  const [starredProjects, setStarredProjects] = useState(() => {
-    try {
-      const saved = localStorage.getItem('starredProjects');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch (error) {
-      console.error('Error loading starred projects:', error);
-      return new Set();
-    }
-  });
+  const [creatingWorktree, setCreatingWorktree] = useState({});
 
   // Touch handler to prevent double-tap issues on iPad (only for buttons, not scroll areas)
   const handleTouchClick = (callback) => {
@@ -178,27 +168,6 @@ function Sidebar({
     setExpandedProjects(newExpanded);
   };
 
-  // Starred projects utility functions
-  const toggleStarProject = (projectName) => {
-    const newStarred = new Set(starredProjects);
-    if (newStarred.has(projectName)) {
-      newStarred.delete(projectName);
-    } else {
-      newStarred.add(projectName);
-    }
-    setStarredProjects(newStarred);
-    
-    // Persist to localStorage
-    try {
-      localStorage.setItem('starredProjects', JSON.stringify([...newStarred]));
-    } catch (error) {
-      console.error('Error saving starred projects:', error);
-    }
-  };
-
-  const isProjectStarred = (projectName) => {
-    return starredProjects.has(projectName);
-  };
 
   // Helper function to get all sessions for a project (initial + additional)
   const getAllSessions = (project) => {
@@ -223,16 +192,8 @@ function Sidebar({
     return mostRecentDate;
   };
 
-  // Combined sorting: starred projects first, then by selected order
+  // Simple sorting by name or date
   const sortedProjects = [...projects].sort((a, b) => {
-    const aStarred = isProjectStarred(a.name);
-    const bStarred = isProjectStarred(b.name);
-    
-    // First, sort by starred status
-    if (aStarred && !bStarred) return -1;
-    if (!aStarred && bStarred) return 1;
-    
-    // For projects with same starred status, sort by selected order
     if (projectSortOrder === 'date') {
       // Sort by most recent activity (descending)
       return getProjectLastActivity(b) - getProjectLastActivity(a);
@@ -299,45 +260,101 @@ function Sidebar({
     }
   };
 
-  const deleteProject = async (projectName) => {
-    if (!confirm('Are you sure you want to delete this empty project? This action cannot be undone.')) {
-      return;
-    }
+  const removeProjectFromBrowser = async (projectName) => {
+    // Find the project to check if it's a worktree
+    const project = projects.find(p => p.name === projectName);
+    
+    if (project?.isWorktree) {
+      // For worktrees, always delete the folder and ask for confirmation
+      if (!confirm(`Are you sure you want to delete this worktree (${project.baseProjectName} - ${project.worktreeVersion})?\n\nThis will permanently delete the worktree folder and all chat history.`)) {
+        return;
+      }
 
-    try {
-      const response = await api.deleteProject(projectName);
+      try {
+        // Extract version from worktree project name (e.g., "calenzo-v2" -> "V2")
+        const version = project.worktreeVersion;
+        const response = await api.deleteWorktree(version);
 
-      if (response.ok) {
-        // Call parent callback if provided
-        if (onProjectDelete) {
-          onProjectDelete(projectName);
+        if (response.ok) {
+          console.log(`✅ Deleted worktree ${version}`);
+          // Call parent callback if provided
+          if (onProjectDelete) {
+            onProjectDelete(projectName);
+          }
+        } else {
+          const error = await response.json();
+          console.error('Failed to delete worktree');
+          alert(error.error || 'Failed to delete worktree. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error deleting worktree:', error);
+        alert('Error deleting worktree. Please try again.');
+      }
+    } else {
+      // For regular projects, ask if they want to delete the folder too
+      const deleteFolder = confirm('Do you also want to delete the project folder from the file system?\n\nChoose "OK" to delete the folder permanently, or "Cancel" to only remove from browser.');
+      
+      if (deleteFolder) {
+        // User wants to delete the actual folder
+        if (!confirm('Are you sure you want to permanently delete the project folder? This cannot be undone.')) {
+          return;
+        }
+        
+        try {
+          const response = await api.deleteProject(projectName);
+          
+          if (response.ok) {
+            console.log(`✅ Deleted project folder for ${projectName}`);
+            // Call parent callback if provided
+            if (onProjectDelete) {
+              onProjectDelete(projectName);
+            }
+          } else {
+            const error = await response.json();
+            console.error('Failed to delete project folder');
+            alert(error.error || 'Failed to delete project folder. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error deleting project folder:', error);
+          alert('Error deleting project folder. Please try again.');
         }
       } else {
-        const error = await response.json();
-        console.error('Failed to delete project');
-        alert(error.error || 'Failed to delete project. Please try again.');
+        // User just wants to remove from browser
+        if (!confirm('Are you sure you want to remove this project from the browser? This will not delete the actual project folder.')) {
+          return;
+        }
+
+        try {
+          const response = await api.removeProjectFromBrowser(projectName);
+
+          if (response.ok) {
+            console.log(`✅ Removed project ${projectName} from browser`);
+            // Call parent callback if provided
+            if (onProjectDelete) {
+              onProjectDelete(projectName);
+            }
+          } else {
+            const error = await response.json();
+            console.error('Failed to remove project from browser');
+            alert(error.error || 'Failed to remove project from browser. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error removing project from browser:', error);
+          alert('Error removing project from browser. Please try again.');
+        }
       }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      alert('Error deleting project. Please try again.');
     }
   };
 
-  const createNewProject = async () => {
-    if (!newProjectPath.trim()) {
-      alert('Please enter a project path');
-      return;
-    }
-
+  const handleSelectProject = async (projectPath) => {
     setCreatingProject(true);
     
     try {
-      const response = await api.createProject(newProjectPath.trim());
+      const response = await api.createProject(projectPath);
 
       if (response.ok) {
         const result = await response.json();
-        setShowNewProject(false);
-        setNewProjectPath('');
+        setShowProjectPicker(false);
         
         // Refresh projects to show the new one
         if (window.refreshProjects) {
@@ -347,19 +364,14 @@ function Sidebar({
         }
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create project. Please try again.');
+        alert(error.error || 'Failed to add project. Please try again.');
       }
     } catch (error) {
-      console.error('Error creating project:', error);
-      alert('Error creating project. Please try again.');
+      console.error('Error adding project:', error);
+      alert('Error adding project. Please try again.');
     } finally {
       setCreatingProject(false);
     }
-  };
-
-  const cancelNewProject = () => {
-    setShowNewProject(false);
-    setNewProjectPath('');
   };
 
   const loadMoreSessions = async (project) => {
@@ -398,6 +410,77 @@ function Sidebar({
       console.error('Error loading more sessions:', error);
     } finally {
       setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
+    }
+  };
+
+  // Create a new worktree for a project
+  const createWorktree = async (project, version) => {
+    const worktreeKey = `${project.name}-${version}`;
+    setCreatingWorktree(prev => ({ ...prev, [worktreeKey]: true }));
+    
+    try {
+      // Extract the actual project folder name from the path
+      const projectFolderName = project.path.split('/').pop();
+      
+      const response = await api.createWorktree(version, {
+        branch: `feature/${version.toLowerCase()}`,
+        projectPath: project.path,
+        projectName: projectFolderName
+      });
+      
+      if (response.ok) {
+        console.log(`✅ Created worktree ${version} for ${project.name}`);
+        
+        // Refresh the main projects list to show the new worktree project
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        }
+        
+        // Capture the latest user prompt from current session
+        let latestUserPrompt = '';
+        if (messages && messages.length > 0 && selectedProject?.name === project.name) {
+          // Find the last user message in the current session
+          for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i];
+            if (msg.role === 'user' && msg.content && typeof msg.content === 'string') {
+              // Skip command messages that start with <command-name>
+              if (!msg.content.startsWith('<command-name>')) {
+                latestUserPrompt = msg.content;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Wait a moment for the project list to refresh, then navigate to the new worktree
+        setTimeout(() => {
+          // Find the newly created worktree project in the projects list
+          const worktreeName = `${projectFolderName}-${version.toLowerCase()}`;
+          const worktreeProject = projects.find(p => p.name === worktreeName || p.path.includes(worktreeName));
+          
+          if (worktreeProject) {
+            // Select the worktree project
+            onProjectSelect(worktreeProject);
+            
+            // Start a new session with the captured prompt
+            if (latestUserPrompt) {
+              // Store the prompt for the new session
+              sessionStorage.setItem('pendingWorktreePrompt', latestUserPrompt);
+            }
+            
+            onNewSession(worktreeProject);
+          }
+        }, 1000);
+        
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to create worktree');
+      }
+    } catch (error) {
+      console.error(`Error creating worktree ${version}:`, error);
+      alert('Error creating worktree. Please try again.');
+    } finally {
+      setCreatingWorktree(prev => ({ ...prev, [worktreeKey]: false }));
     }
   };
 
@@ -450,8 +533,8 @@ function Sidebar({
               variant="default"
               size="sm"
               className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md"
-              onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
+              onClick={() => setShowProjectPicker(true)}
+              title="Add existing project (Ctrl+N)"
             >
               <FolderPlus className="w-4 h-4" />
             </Button>
@@ -487,7 +570,7 @@ function Sidebar({
               </button>
               <button
                 className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center active:scale-95 transition-all duration-150"
-                onClick={() => setShowNewProject(true)}
+                onClick={() => setShowProjectPicker(true)}
               >
                 <FolderPlus className="w-4 h-4" />
               </button>
@@ -496,106 +579,12 @@ function Sidebar({
         </div>
       </div>
       
-      {/* New Project Form */}
-      {showNewProject && (
-        <div className="md:p-3 md:border-b md:border-border md:bg-muted/30">
-          {/* Desktop Form */}
-          <div className="hidden md:block space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <FolderPlus className="w-4 h-4" />
-              Create New Project
-            </div>
-            <Input
-              value={newProjectPath}
-              onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
-              className="text-sm focus:ring-2 focus:ring-primary/20"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') createNewProject();
-                if (e.key === 'Escape') cancelNewProject();
-              }}
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={createNewProject}
-                disabled={!newProjectPath.trim() || creatingProject}
-                className="flex-1 h-8 text-xs hover:bg-primary/90 transition-colors"
-              >
-                {creatingProject ? 'Creating...' : 'Create Project'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={cancelNewProject}
-                disabled={creatingProject}
-                className="h-8 text-xs hover:bg-accent transition-colors"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-          
-          {/* Mobile Form - Simple Overlay */}
-          <div className="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-            <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-primary/10 rounded-md flex items-center justify-center">
-                    <FolderPlus className="w-3 h-3 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">New Project</h2>
-                  </div>
-                </div>
-                <button
-                  onClick={cancelNewProject}
-                  disabled={creatingProject}
-                  className="w-6 h-6 rounded-md bg-muted flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                <Input
-                  value={newProjectPath}
-                  onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-md focus:border-primary transition-colors"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') createNewProject();
-                    if (e.key === 'Escape') cancelNewProject();
-                  }}
-                />
-                
-                <div className="flex gap-2">
-                  <Button
-                    onClick={cancelNewProject}
-                    disabled={creatingProject}
-                    variant="outline"
-                    className="flex-1 h-9 text-sm rounded-md active:scale-95 transition-transform"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={createNewProject}
-                    disabled={!newProjectPath.trim() || creatingProject}
-                    className="flex-1 h-9 text-sm rounded-md bg-primary hover:bg-primary/90 active:scale-95 transition-all"
-                  >
-                    {creatingProject ? 'Creating...' : 'Create'}
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Safe area for mobile */}
-              <div className="h-4" />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Project Picker Modal */}
+      <ProjectPickerModal
+        isOpen={showProjectPicker}
+        onClose={() => setShowProjectPicker(false)}
+        onSelectProject={handleSelectProject}
+      />
       
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
@@ -637,12 +626,20 @@ function Sidebar({
           ) : projects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
-                <Folder className="w-6 h-6 text-muted-foreground" />
+                <FolderPlus className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
-              <p className="text-sm text-muted-foreground">
-                Run Claude CLI in a project directory to get started
+              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects added</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Click the + button above to add your first project directory
               </p>
+              <Button
+                size="sm"
+                onClick={() => setShowProjectPicker(true)}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Add Project
+              </Button>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
@@ -658,7 +655,6 @@ function Sidebar({
             filteredProjects.map((project) => {
               const isExpanded = expandedProjects.has(project.name);
               const isSelected = selectedProject?.name === project.name;
-              const isStarred = isProjectStarred(project.name);
               
               return (
                 <div key={project.name} className="md:space-y-1">
@@ -669,8 +665,7 @@ function Sidebar({
                       <div
                         className={cn(
                           "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150",
-                          isSelected && "bg-primary/5 border-primary/20",
-                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30"
+                          isSelected && "bg-primary/5 border-primary/20"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -752,38 +747,17 @@ function Sidebar({
                               </>
                             ) : (
                               <>
-                                {/* Star button */}
-                                <button
-                                  className={cn(
-                                    "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
-                                    isStarred 
-                                      ? "bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800" 
-                                      : "bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800"
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleStarProject(project.name);
-                                  }}
-                                  onTouchEnd={handleTouchClick(() => toggleStarProject(project.name))}
-                                  title={isStarred ? "Remove from favorites" : "Add to favorites"}
-                                >
-                                  <Star className={cn(
-                                    "w-4 h-4 transition-colors",
-                                    isStarred 
-                                      ? "text-yellow-600 dark:text-yellow-400 fill-current" 
-                                      : "text-gray-600 dark:text-gray-400"
-                                  )} />
-                                </button>
-                                {getAllSessions(project).length === 0 && (
+                                {(project.isManuallyAdded || project.isWorktree) && (
                                   <button
                                     className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteProject(project.name);
+                                      removeProjectFromBrowser(project.name);
                                     }}
-                                    onTouchEnd={handleTouchClick(() => deleteProject(project.name))}
+                                    onTouchEnd={handleTouchClick(() => removeProjectFromBrowser(project.name))}
+                                    title={project.isWorktree ? "Delete worktree (permanent)" : "Remove from browser (keeps folder)"}
                                   >
-                                    <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                    <X className="w-4 h-4 text-red-600 dark:text-red-400" />
                                   </button>
                                 )}
                                 <button
@@ -815,8 +789,7 @@ function Sidebar({
                       variant="ghost"
                       className={cn(
                         "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50",
-                        isSelected && "bg-accent text-accent-foreground",
-                        isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
+                        isSelected && "bg-accent text-accent-foreground"
                       )}
                       onClick={() => {
                         // Desktop behavior: select project and toggle
@@ -903,27 +876,6 @@ function Sidebar({
                           </>
                         ) : (
                           <>
-                            {/* Star button */}
-                            <div
-                              className={cn(
-                                "w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100",
-                                isStarred 
-                                  ? "hover:bg-yellow-50 dark:hover:bg-yellow-900/20 opacity-100" 
-                                  : "hover:bg-accent"
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleStarProject(project.name);
-                              }}
-                              title={isStarred ? "Remove from favorites" : "Add to favorites"}
-                            >
-                              <Star className={cn(
-                                "w-3 h-3 transition-colors",
-                                isStarred 
-                                  ? "text-yellow-600 dark:text-yellow-400 fill-current" 
-                                  : "text-muted-foreground"
-                              )} />
-                            </div>
                             <div
                               className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-accent flex items-center justify-center rounded cursor-pointer touch:opacity-100"
                               onClick={(e) => {
@@ -934,16 +886,16 @@ function Sidebar({
                             >
                               <Edit3 className="w-3 h-3" />
                             </div>
-                            {getAllSessions(project).length === 0 && (
+                            {project.isManuallyAdded && (
                               <div
                                 className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center rounded cursor-pointer touch:opacity-100"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  deleteProject(project.name);
+                                  removeProjectFromBrowser(project.name);
                                 }}
-                                title="Delete empty project (Delete)"
+                                title={project.isWorktree ? "Delete worktree (permanent)" : "Remove from browser (keeps folder)"}
                               >
-                                <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                <X className="w-3 h-3 text-red-600 dark:text-red-400" />
                               </div>
                             )}
                             {isExpanded ? (
@@ -1197,8 +1149,9 @@ function Sidebar({
                         </Button>
                       )}
                       
-                      {/* New Session Button */}
-                      <div className="md:hidden px-3 pb-2">
+                      {/* New Session and Worktree Buttons */}
+                      <div className="md:hidden px-3 pb-2 space-y-2">
+                        {/* Regular New Session Button */}
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
                           onClick={() => {
@@ -1209,17 +1162,74 @@ function Sidebar({
                           <Plus className="w-3 h-3" />
                           New Session
                         </button>
+                        
+                        {/* Worktree Creation Buttons - Only show for non-worktree projects */}
+                        {!project.isWorktree && (
+                          <div className="grid grid-cols-5 gap-1">
+                            {['V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11'].map((version) => {
+                              const worktreeKey = `${project.name}-${version}`;
+                              const isCreating = creatingWorktree[worktreeKey];
+                              
+                              return (
+                                <button
+                                  key={version}
+                                  className="h-7 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md flex items-center justify-center gap-1 font-medium text-xs active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
+                                  onClick={() => createWorktree(project, version)}
+                                  disabled={isCreating}
+                                >
+                                  {isCreating ? (
+                                    <div className="w-2.5 h-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+                                  ) : (
+                                    <GitBranch className="w-2.5 h-2.5" />
+                                  )}
+                                  {version}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                       
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
-                        onClick={() => onNewSession(project)}
-                      >
-                        <Plus className="w-3 h-3" />
-                        New Session
-                      </Button>
+                      {/* Desktop New Session and Worktree Buttons */}
+                      <div className="hidden md:block space-y-1">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full justify-start gap-2 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                          onClick={() => onNewSession(project)}
+                        >
+                          <Plus className="w-3 h-3" />
+                          New Session
+                        </Button>
+                        
+                        {/* Worktree Creation Buttons - Only show for non-worktree projects */}
+                        {!project.isWorktree && (
+                          <div className="grid grid-cols-5 gap-1 mt-1">
+                            {['V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11'].map((version) => {
+                              const worktreeKey = `${project.name}-${version}`;
+                              const isCreating = creatingWorktree[worktreeKey];
+                              
+                              return (
+                                <Button
+                                  key={version}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
+                                  onClick={() => createWorktree(project, version)}
+                                  disabled={isCreating}
+                                >
+                                  {isCreating ? (
+                                    <div className="w-2.5 h-2.5 animate-spin rounded-full border border-current border-t-transparent mr-1" />
+                                  ) : (
+                                    <GitBranch className="w-2.5 h-2.5 mr-1" />
+                                  )}
+                                  {version}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload, GitMerge, FileSearch } from 'lucide-react';
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
 
@@ -31,6 +31,8 @@ function GitPanel({ selectedProject, isMobile }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCommitAreaCollapsed, setIsCommitAreaCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'discard|commit|pull|push', file?: string, message?: string }
+  const [isDiffing, setIsDiffing] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
   const textareaRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -292,6 +294,48 @@ function GitPanel({ selectedProject, isMobile }) {
       console.error('Error publishing branch:', error);
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  // Handle diffing worktree with main project
+  const handleDiffWithMain = async () => {
+    if (!selectedProject?.isWorktree) return;
+    
+    setIsDiffing(true);
+    try {
+      // For now, just show an alert. This would open a diff view
+      // TODO: Implement actual diff view with the main project
+      alert('Diff view with main project will be implemented soon. This will show differences between this worktree and the main project.');
+    } catch (error) {
+      console.error('Error generating diff:', error);
+      alert('Error generating diff with main project');
+    } finally {
+      setIsDiffing(false);
+    }
+  };
+
+  // Handle merging worktree into main project
+  const handleMergeToMain = async () => {
+    if (!selectedProject?.isWorktree) return;
+    
+    const confirmed = confirm(
+      `Are you sure you want to merge this worktree (${selectedProject.baseProjectName} - ${selectedProject.worktreeVersion}) into the main project?\n\n` +
+      'This will copy all changes from this worktree to the main project using the file system. ' +
+      'Make sure you have committed all your changes first.'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsMerging(true);
+    try {
+      // TODO: Implement actual merge functionality
+      // This would copy files from worktree to main project
+      alert('Merge functionality will be implemented soon. This will copy changes from this worktree to the main project using the file system.');
+    } catch (error) {
+      console.error('Error merging to main:', error);
+      alert('Error merging to main project');
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -864,6 +908,31 @@ function GitPanel({ selectedProject, isMobile }) {
                 </>
               )}
             </>
+          )}
+          
+          {/* Worktree-specific buttons */}
+          {selectedProject?.isWorktree && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleDiffWithMain}
+                disabled={isDiffing}
+                className="px-2 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-1"
+                title={`Show differences with main ${selectedProject.baseProjectName} project`}
+              >
+                <FileSearch className={`w-3 h-3 ${isDiffing ? 'animate-pulse' : ''}`} />
+                <span>{isDiffing ? 'Diffing...' : 'Diff'}</span>
+              </button>
+              
+              <button
+                onClick={handleMergeToMain}
+                disabled={isMerging}
+                className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+                title={`Merge this worktree into main ${selectedProject.baseProjectName} project`}
+              >
+                <GitMerge className={`w-3 h-3 ${isMerging ? 'animate-pulse' : ''}`} />
+                <span>{isMerging ? 'Merging...' : 'Merge'}</span>
+              </button>
+            </div>
           )}
           
           <button

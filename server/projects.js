@@ -72,6 +72,34 @@ async function extractProjectDirectory(projectName) {
     return projectDirectoryCache.get(projectName);
   }
   
+  // Special handling for worktree projects
+  // Check if this project name corresponds to a worktree directory
+  const worktreesBasePath = path.join(process.env.HOME, 'IdeaProjects', 'worktrees');
+  try {
+    await fs.access(worktreesBasePath);
+    const worktreeEntries = await fs.readdir(worktreesBasePath, { withFileTypes: true });
+    
+    for (const entry of worktreeEntries) {
+      if (entry.isDirectory() && entry.name.includes('-v')) {
+        // Check if the encoded project name matches this worktree directory name
+        const encodedName = entry.name.replace(/\//g, '-');
+        if (encodedName === projectName) {
+          const worktreePath = path.join(worktreesBasePath, entry.name);
+          // Verify it's a valid git worktree
+          try {
+            await fs.access(path.join(worktreePath, '.git'));
+            // Cache and return the worktree path
+            projectDirectoryCache.set(projectName, worktreePath);
+            return worktreePath;
+          } catch (error) {
+            // Not a valid worktree, continue checking
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // Worktrees folder doesn't exist, continue with normal logic
+  }
   
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   const cwdCounts = new Map();
@@ -80,6 +108,20 @@ async function extractProjectDirectory(projectName) {
   let extractedPath;
   
   try {
+    // Check if the project directory exists first
+    try {
+      await fs.access(projectDir);
+    } catch (accessError) {
+      if (accessError.code === 'ENOENT') {
+        // Project directory doesn't exist, fall back to decoded project name
+        console.warn(`Project directory not found for ${projectName}, using fallback path`);
+        extractedPath = projectName.replace(/-/g, '/');
+        projectDirectoryCache.set(projectName, extractedPath);
+        return extractedPath;
+      }
+      throw accessError;
+    }
+    
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     
@@ -174,45 +216,109 @@ async function getProjects() {
   const projects = [];
   const existingProjects = new Set();
   
+  // Add worktree projects as regular projects with version prefixes
+  const worktreesBasePath = path.join(process.env.HOME, 'IdeaProjects', 'worktrees');
   try {
-    // First, get existing projects from the file system
+    await fs.access(worktreesBasePath);
+    const worktreeEntries = await fs.readdir(worktreesBasePath, { withFileTypes: true });
+    
+    for (const entry of worktreeEntries) {
+      if (entry.isDirectory() && entry.name.includes('-v')) {
+        const worktreePath = path.join(worktreesBasePath, entry.name);
+        
+        // Verify this is actually a valid git worktree
+        try {
+          await fs.access(path.join(worktreePath, '.git'));
+        } catch (error) {
+          console.warn(`Skipping invalid worktree directory: ${entry.name}`);
+          continue;
+        }
+        
+        // Extract project name and version from worktree name (e.g., "calenzo-v2" -> "calenzo", "V2")
+        const lastDashIndex = entry.name.lastIndexOf('-v');
+        if (lastDashIndex === -1) continue;
+        
+        const projectName = entry.name.substring(0, lastDashIndex);
+        const versionPart = entry.name.substring(lastDashIndex + 1);
+        const version = versionPart.toUpperCase();
+        
+        // Create project entry for worktree
+        // Claude CLI encodes the full path, so we need to match that encoding
+        const claudeProjectName = worktreePath.replace(/\//g, '-');
+        const worktreeProject = {
+          name: claudeProjectName, // Use full path encoding to match Claude CLI behavior
+          path: worktreePath,
+          displayName: `${projectName} - ${version}`,
+          fullPath: worktreePath,
+          isCustomName: false,
+          isWorktree: true,
+          worktreeVersion: version,
+          baseProjectName: projectName,
+          sessions: []
+        };
+        
+        // Try to get sessions for this worktree project
+        try {
+          const sessionResult = await getSessions(worktreeProject.name, 5, 0);
+          worktreeProject.sessions = sessionResult.sessions || [];
+          worktreeProject.sessionMeta = {
+            hasMore: sessionResult.hasMore,
+            total: sessionResult.total
+          };
+        } catch (e) {
+          console.warn(`Could not load sessions for worktree project ${worktreeProject.name}:`, e.message);
+        }
+        
+        projects.push(worktreeProject);
+      }
+    }
+  } catch (error) {
+    // Worktrees folder doesn't exist, skip
+  }
+  
+  try {
+    // Only get projects that have been manually added via config
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
     
     for (const entry of entries) {
       if (entry.isDirectory()) {
         existingProjects.add(entry.name);
-        const projectPath = path.join(claudeDir, entry.name);
         
-        // Extract actual project directory from JSONL sessions
-        const actualProjectDir = await extractProjectDirectory(entry.name);
-        
-        // Get display name from config or generate one
-        const customName = config[entry.name]?.displayName;
-        const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
-        const fullPath = actualProjectDir;
-        
-        const project = {
-          name: entry.name,
-          path: actualProjectDir,
-          displayName: customName || autoDisplayName,
-          fullPath: fullPath,
-          isCustomName: !!customName,
-          sessions: []
-        };
-        
-        // Try to get sessions for this project (just first 5 for performance)
-        try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
-          project.sessions = sessionResult.sessions || [];
-          project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
-            total: sessionResult.total
+        // Only include if manually added in config or if it's a worktree-related project
+        if (config[entry.name]?.manuallyAdded || entry.name.includes('worktrees')) {
+          const projectPath = path.join(claudeDir, entry.name);
+          
+          // Extract actual project directory from JSONL sessions
+          const actualProjectDir = await extractProjectDirectory(entry.name);
+          
+          // Get display name from config or generate one
+          const customName = config[entry.name]?.displayName;
+          const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
+          const fullPath = actualProjectDir;
+          
+          const project = {
+            name: entry.name,
+            path: actualProjectDir,
+            displayName: customName || autoDisplayName,
+            fullPath: fullPath,
+            isCustomName: !!customName,
+            sessions: []
           };
-        } catch (e) {
-          console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
+          
+          // Try to get sessions for this project (just first 5 for performance)
+          try {
+            const sessionResult = await getSessions(entry.name, 5, 0);
+            project.sessions = sessionResult.sessions || [];
+            project.sessionMeta = {
+              hasMore: sessionResult.hasMore,
+              total: sessionResult.total
+            };
+          } catch (e) {
+            console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
+          }
+          
+          projects.push(project);
         }
-        
-        projects.push(project);
       }
     }
   } catch (error) {
@@ -234,15 +340,15 @@ async function getProjects() {
         }
       }
       
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: []
-        };
+      const project = {
+        name: projectName,
+        path: actualProjectDir,
+        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+        fullPath: actualProjectDir,
+        isCustomName: !!projectConfig.displayName,
+        isManuallyAdded: true,
+        sessions: []
+      };
       
       projects.push(project);
     }
@@ -255,6 +361,17 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   
   try {
+    // Check if project directory exists first
+    try {
+      await fs.access(projectDir);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Project directory doesn't exist yet (common for new worktrees)
+        return { sessions: [], hasMore: false, total: 0 };
+      }
+      throw error;
+    }
+    
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     
@@ -544,6 +661,25 @@ async function deleteProject(projectName) {
   }
 }
 
+// Remove a project from the browser only (don't delete physical folder)
+async function removeProjectFromBrowser(projectName) {
+  try {
+    // Remove from project config
+    const config = await loadProjectConfig();
+    if (!config[projectName]) {
+      throw new Error(`Project ${projectName} not found in config`);
+    }
+    
+    delete config[projectName];
+    await saveProjectConfig(config);
+    
+    return true;
+  } catch (error) {
+    console.error(`Error removing project ${projectName} from browser:`, error);
+    throw error;
+  }
+}
+
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
@@ -558,25 +694,20 @@ async function addProjectManually(projectPath, displayName = null) {
   // Generate project name (encode path for use as directory name)
   const projectName = absolutePath.replace(/\//g, '-');
   
-  // Check if project already exists in config or as a folder
+  // Check if project already exists in config
   const config = await loadProjectConfig();
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
   
-  try {
-    await fs.access(projectDir);
-    throw new Error(`Project already exists for path: ${absolutePath}`);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
+  if (config[projectName] && config[projectName].manuallyAdded) {
+    throw new Error(`Project already added to browser for path: ${absolutePath}`);
   }
   
-  if (config[projectName]) {
-    throw new Error(`Project already configured for path: ${absolutePath}`);
+  // Add to config as manually added project (or update existing)
+  if (!config[projectName]) {
+    config[projectName] = {};
   }
   
-  // Add to config as manually added project
   config[projectName] = {
+    ...config[projectName],
     manuallyAdded: true,
     originalPath: absolutePath
   };
@@ -609,6 +740,7 @@ export {
   isProjectEmpty,
   deleteProject,
   addProjectManually,
+  removeProjectFromBrowser,
   loadProjectConfig,
   saveProjectConfig,
   extractProjectDirectory,

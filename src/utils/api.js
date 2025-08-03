@@ -63,6 +63,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
+  removeProjectFromBrowser: (projectName) =>
+    authenticatedFetch(`/api/projects/${projectName}/remove`, {
+      method: 'DELETE',
+    }),
+  listDirectories: (path = null) =>
+    authenticatedFetch(`/api/directories${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
@@ -78,4 +84,17 @@ export const api = {
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
     }),
+  
+  // Worktree endpoints
+  getWorktrees: () => authenticatedFetch('/api/worktree'),
+  createWorktree: (version, options = {}) =>
+    authenticatedFetch(`/api/worktree/create/${version}`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+  deleteWorktree: (version) =>
+    authenticatedFetch(`/api/worktree/${version}`, {
+      method: 'DELETE',
+    }),
+  cleanupWorktrees: () => authenticatedFetch('/api/worktree/cleanup'),
 };

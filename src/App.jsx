@@ -311,6 +311,19 @@ function AppContent() {
   const handleSidebarRefresh = async () => {
     // Refresh only the sessions for all projects, don't change selected state
     try {
+      // Clean up orphaned worktree sessions first
+      try {
+        const cleanupResponse = await api.cleanupWorktrees();
+        if (cleanupResponse.ok) {
+          const cleanupData = await cleanupResponse.json();
+          if (cleanupData.cleanedCount > 0) {
+            console.log(`🧹 Cleaned up ${cleanupData.cleanedCount} orphaned worktree session directories`);
+          }
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Error during worktree cleanup:', cleanupError);
+      }
+      
       const response = await api.projects();
       const freshProjects = await response.json();
       
@@ -517,6 +530,7 @@ function AppContent() {
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
+              messages={messages}
               onShowVersionModal={() => setShowVersionModal(true)}
             />
           </div>
@@ -562,6 +576,7 @@ function AppContent() {
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
+              messages={messages}
               onShowVersionModal={() => setShowVersionModal(true)}
             />
           </div>

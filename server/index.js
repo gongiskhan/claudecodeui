@@ -36,11 +36,12 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, removeProjectFromBrowser, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
+import worktreeRoutes from './routes/worktree.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -135,27 +136,39 @@ async function setupProjectsWatcher() {
 const app = express();
 const server = http.createServer(app);
 
+// Rate limiter for WebSocket connection logs
+const wsLogLimiter = new Map();
+
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info) => {
-    console.log('WebSocket connection attempt to:', info.req.url);
+    const url = new URL(info.req.url, 'http://localhost');
+    const pathname = url.pathname;
+    
+    // Rate limit logging - only log once per path per 30 seconds
+    const now = Date.now();
+    const lastLog = wsLogLimiter.get(pathname) || 0;
+    const shouldLog = now - lastLog > 30000; // 30 seconds
+    
+    if (shouldLog) {
+      console.log('🔗 WebSocket connection to:', pathname);
+      wsLogLimiter.set(pathname, now);
+    }
     
     // Extract token from query parameters or headers
-    const url = new URL(info.req.url, 'http://localhost');
     const token = url.searchParams.get('token') || 
                   info.req.headers.authorization?.split(' ')[1];
     
     // Verify token
     const user = authenticateWebSocket(token);
     if (!user) {
-      console.log('❌ WebSocket authentication failed');
+      if (shouldLog) console.log('❌ WebSocket authentication failed');
       return false;
     }
     
     // Store user info in the request for later use
     info.req.user = user;
-    console.log('✅ WebSocket authenticated for user:', user.username);
     return true;
   }
 });
@@ -175,15 +188,28 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
+// Worktree API Routes (protected)
+app.use('/api/worktree', authenticateToken, worktreeRoutes);
+
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
+
+// Rate limiter for config API logs
+const configLogLimiter = { lastLog: 0, count: 0 };
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
   const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
-  console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
+  // Only log config API calls once per minute or every 50 calls
+  const now = Date.now();
+  configLogLimiter.count++;
+  if (now - configLogLimiter.lastLog > 60000 || configLogLimiter.count >= 50) {
+    console.log(`📡 Config API (${configLogLimiter.count} calls) - Host: ${host}`);
+    configLogLimiter.lastLog = now;
+    configLogLimiter.count = 0;
+  }
   
   res.json({
     serverPort: PORT,
@@ -266,7 +292,70 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     const project = await addProjectManually(projectPath.trim());
     res.json({ success: true, project });
   } catch (error) {
-    console.error('Error creating project:', error);
+    console.error('Error adding project:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove project from browser only (not physical folder)
+app.delete('/api/projects/:projectName/remove', authenticateToken, async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    await removeProjectFromBrowser(projectName);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing project from browser:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List directories for file picker
+app.get('/api/directories', authenticateToken, async (req, res) => {
+  try {
+    const { path: requestedPath } = req.query;
+    
+    // Default to user's home directory if no path provided
+    const targetPath = requestedPath ? path.resolve(requestedPath) : process.env.HOME;
+    
+    // Security check - ensure path is within reasonable bounds
+    if (!targetPath.startsWith('/Users') && !targetPath.startsWith('/home')) {
+      return res.status(403).json({ error: 'Access denied to this directory' });
+    }
+    
+    try {
+      const entries = await fsPromises.readdir(targetPath, { withFileTypes: true });
+      
+      const directories = entries
+        .filter(entry => entry.isDirectory())
+        .filter(entry => !entry.name.startsWith('.') || entry.name === '.claude') // Hide hidden dirs except .claude
+        .map(entry => ({
+          name: entry.name,
+          path: path.join(targetPath, entry.name),
+          isDirectory: true
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Add parent directory option if not at root
+      const parentPath = path.dirname(targetPath);
+      const canGoUp = parentPath !== targetPath && (parentPath.startsWith('/Users') || parentPath.startsWith('/home'));
+      
+      res.json({
+        currentPath: targetPath,
+        parentPath: canGoUp ? parentPath : null,
+        directories
+      });
+      
+    } catch (error) {
+      if (error.code === 'EACCES') {
+        res.status(403).json({ error: 'Permission denied' });
+      } else if (error.code === 'ENOENT') {
+        res.status(404).json({ error: 'Directory not found' });
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error listing directories:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -276,8 +365,6 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
   try {
     const { projectName } = req.params;
     const { filePath } = req.query;
-    
-    console.log('📄 File read request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -305,8 +392,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
   try {
     const { projectName } = req.params;
     const { path: filePath } = req.query;
-    
-    console.log('🖼️ Binary file serve request:', projectName, filePath);
     
     // Using fs from import
     // Using mime from import
@@ -351,8 +436,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
   try {
     const { projectName } = req.params;
     const { filePath, content } = req.body;
-    
-    console.log('💾 File save request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -428,7 +511,6 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
   const url = request.url;
-  console.log('🔗 Client connected to:', url);
   
   // Parse URL to get pathname without query parameters
   const urlObj = new URL(url, 'http://localhost');
@@ -438,16 +520,23 @@ wss.on('connection', (ws, request) => {
     handleShellConnection(ws);
   } else if (pathname === '/ws') {
     handleChatConnection(ws);
+  } else if (pathname === '/ws-worktree') {
+    // Legacy worktree WebSocket endpoint - silently close without logging
+    ws.close();
   } else {
-    console.log('❌ Unknown WebSocket path:', pathname);
+    // Only log unknown paths once per minute
+    const now = Date.now();
+    const lastUnknownLog = wsLogLimiter.get('unknown-' + pathname) || 0;
+    if (now - lastUnknownLog > 60000) {
+      console.log('❌ Unknown WebSocket path:', pathname);
+      wsLogLimiter.set('unknown-' + pathname, now);
+    }
     ws.close();
   }
 });
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
-  console.log('💬 Chat WebSocket connected');
-  
   // Add to connected clients for project updates
   connectedClients.add(ws);
   
@@ -456,12 +545,9 @@ function handleChatConnection(ws) {
       const data = JSON.parse(message);
       
       if (data.type === 'claude-command') {
-        console.log('💬 User message:', data.command || '[Continue/Resume]');
-        console.log('📁 Project:', data.options?.projectPath || 'Unknown');
-        console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+        console.log('💬 Claude command received');
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'abort-session') {
-        console.log('🛑 Abort session request:', data.sessionId);
         const success = abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({
           type: 'session-aborted',
@@ -479,7 +565,6 @@ function handleChatConnection(ws) {
   });
   
   ws.on('close', () => {
-    console.log('🔌 Chat client disconnected');
     // Remove from connected clients
     connectedClients.delete(ws);
   });
@@ -487,13 +572,11 @@ function handleChatConnection(ws) {
 
 // Handle shell WebSocket connections
 function handleShellConnection(ws) {
-  console.log('🐚 Shell client connected');
   let shellProcess = null;
   
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Shell message received:', data.type);
       
       if (data.type === 'init') {
         // Initialize shell with project path and session info
@@ -501,8 +584,7 @@ function handleShellConnection(ws) {
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
         
-        console.log('🚀 Starting shell in:', projectPath);
-        console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');
+        console.log('🚀 Shell init:', hasSession ? 'Resume' : 'New');
         
         // First send a welcome message
         const welcomeMsg = hasSession ? 
@@ -526,8 +608,6 @@ function handleShellConnection(ws) {
           // Create shell command that cds to the project directory first
           const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
           
-          console.log('🔧 Executing shell command:', shellCommand);
-          
           // Start shell using PTY for proper terminal emulation
           shellProcess = pty.spawn('bash', ['-c', shellCommand], {
             name: 'xterm-256color',
@@ -543,8 +623,6 @@ function handleShellConnection(ws) {
               BROWSER: 'echo "OPEN_URL:"'
             }
           });
-          
-          console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
           
           // Handle data output
           shellProcess.onData((data) => {
@@ -594,7 +672,6 @@ function handleShellConnection(ws) {
           
           // Handle process exit
           shellProcess.onExit((exitCode) => {
-            console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
             if (ws.readyState === ws.OPEN) {
               ws.send(JSON.stringify({
                 type: 'output',
@@ -620,13 +697,10 @@ function handleShellConnection(ws) {
           } catch (error) {
             console.error('Error writing to shell:', error);
           }
-        } else {
-          console.warn('No active shell process to send input to');
         }
       } else if (data.type === 'resize') {
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
-          console.log('Terminal resize requested:', data.cols, 'x', data.rows);
           shellProcess.resize(data.cols, data.rows);
         }
       }
@@ -642,9 +716,7 @@ function handleShellConnection(ws) {
   });
   
   ws.on('close', () => {
-    console.log('🔌 Shell client disconnected');
     if (shellProcess && shellProcess.kill) {
-      console.log('🔴 Killing shell process:', shellProcess.pid);
       shellProcess.kill();
     }
   });

@@ -1416,6 +1416,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
 
+  // Check for pending worktree prompt when project changes
+  useEffect(() => {
+    if (selectedProject && !selectedSession) {
+      // Check if there's a pending worktree prompt
+      const pendingPrompt = sessionStorage.getItem('pendingWorktreePrompt');
+      if (pendingPrompt) {
+        setInput(pendingPrompt);
+        sessionStorage.removeItem('pendingWorktreePrompt');
+      }
+    }
+  }, [selectedProject?.name, selectedSession]);
 
   useEffect(() => {
     // Handle WebSocket messages
@@ -2053,6 +2064,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       options: {
         projectPath: selectedProject.path,
         cwd: selectedProject.fullPath,
+        projectName: selectedProject.name, // Add project name for Claude CLI session identification
         sessionId: currentSessionId,
         resume: !!currentSessionId,
         toolsSettings: toolsSettings,

@@ -7,7 +7,7 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, projectName } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
@@ -224,8 +224,17 @@ async function spawnClaude(command, options = {}, ws) {
     }).join(' '));
     console.log('Working directory:', workingDir);
     console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
+    console.log('🔍 Project name from options:', projectName);
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
+    
+    // Additional debugging for worktree projects
+    if (projectName && projectName.includes('-v')) {
+      console.log('🌳 WORKTREE DETECTED:');
+      console.log('  - Project name:', projectName);
+      console.log('  - Working directory:', workingDir);
+      console.log('  - Expected Claude project path:', path.join(process.env.HOME, '.claude', 'projects', projectName));
+    }
     
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
