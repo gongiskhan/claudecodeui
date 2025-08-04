@@ -6,7 +6,18 @@ import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
 
 const router = express.Router();
-const execAsync = promisify(exec);
+// Enhanced execAsync with proper git path and environment
+const execAsync = (command, options = {}) => {
+  return promisify(exec)(command, {
+    ...options,
+    shell: true, // Use shell to resolve git from PATH
+    env: { 
+      ...process.env, 
+      PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:' + (process.env.PATH || ''),
+      ...options.env 
+    }
+  });
+};
 
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
@@ -24,7 +35,8 @@ async function validateGitRepository(projectPath) {
   try {
     // Check if directory exists
     await fs.access(projectPath);
-  } catch {
+  } catch (error) {
+    console.warn(`⚠️ Project path not accessible: ${projectPath}`);
     throw new Error(`Project path not found: ${projectPath}`);
   }
 

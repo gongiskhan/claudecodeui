@@ -52,7 +52,8 @@ function Sidebar({
   latestVersion,
   currentVersion,
   onShowVersionModal,
-  messages
+  messages,
+  isMobile
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
@@ -501,7 +502,7 @@ function Sidebar({
       {/* Header */}
       <div className="md:p-4 md:border-b md:border-border">
         {/* Desktop Header */}
-        <div className="hidden md:flex items-center justify-between">
+        <div className="hidden md:flex items-center justify-between" style={{ display: (isMobile === true) ? 'none' : 'flex' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
               <MessageSquare className="w-4 h-4 text-primary-foreground" />
@@ -542,7 +543,7 @@ function Sidebar({
         </div>
         
         {/* Mobile Header */}
-        <div className="md:hidden p-3 border-b border-border">
+        <div className="md:hidden p-3 border-b border-border" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -661,7 +662,7 @@ function Sidebar({
                   {/* Project Header */}
                   <div className="group md:group">
                     {/* Mobile Project Item */}
-                    <div className="md:hidden">
+                    <div className="md:hidden" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
                       <div
                         className={cn(
                           "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150",
@@ -791,6 +792,7 @@ function Sidebar({
                         "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50",
                         isSelected && "bg-accent text-accent-foreground"
                       )}
+                      style={{ display: (isMobile === true) ? 'none' : 'flex' }}
                       onClick={() => {
                         // Desktop behavior: select project and toggle
                         if (selectedProject?.name !== project.name) {
@@ -945,7 +947,7 @@ function Sidebar({
                               </div>
                             )}
                             {/* Mobile Session Item */}
-                            <div className="md:hidden">
+                            <div className="md:hidden" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
                               <div
                                 className={cn(
                                   "p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative",
@@ -1003,7 +1005,7 @@ function Sidebar({
                             </div>
                             
                             {/* Desktop Session Item */}
-                            <div className="hidden md:block">
+                            <div className="hidden md:block" style={{ display: (isMobile === true) ? 'none' : 'block' }}>
                               <Button
                                 variant="ghost"
                                 className={cn(
@@ -1150,7 +1152,7 @@ function Sidebar({
                       )}
                       
                       {/* New Session and Worktree Buttons */}
-                      <div className="md:hidden px-3 pb-2 space-y-2">
+                      <div className="md:hidden px-3 pb-2 space-y-2" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
                         {/* Regular New Session Button */}
                         <button
                           className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
@@ -1191,7 +1193,7 @@ function Sidebar({
                       </div>
                       
                       {/* Desktop New Session and Worktree Buttons */}
-                      <div className="hidden md:block space-y-1">
+                      <div className="hidden md:block space-y-1" style={{ display: (isMobile === true) ? 'none' : 'block' }}>
                         <Button
                           variant="default"
                           size="sm"
@@ -1263,7 +1265,7 @@ function Sidebar({
           </div>
           
           {/* Mobile Version Notification */}
-          <div className="md:hidden p-3 pb-2">
+          <div className="md:hidden p-3 pb-2" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
             <button
               className="w-full h-12 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
               onClick={onShowVersionModal}
@@ -1286,7 +1288,7 @@ function Sidebar({
       {/* Settings Section */}
       <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
         {/* Mobile Settings */}
-        <div className="md:hidden p-4 pb-20 border-t border-border/50">
+        <div className="md:hidden p-4 pb-20 border-t border-border/50" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
           <button
             className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
             onClick={onShowSettings}
@@ -1302,6 +1304,7 @@ function Sidebar({
         <Button
           variant="ghost"
           className="hidden md:flex w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
+          style={{ display: (isMobile === true) ? 'none' : 'flex' }}
           onClick={onShowSettings}
         >
           <Settings className="w-3 h-3" />

@@ -1,0 +1,57 @@
+# Page snapshot
+
+```yaml
+- heading "Claude Code UI" [level=1]
+- paragraph: AI coding assistant interface
+- button "Refresh projects and sessions (Ctrl+R)"
+- button "Add existing project (Ctrl+N)"
+- textbox "Search projects...": testuser
+- button
+- heading "No matching projects" [level=3]
+- paragraph: Try adjusting your search term
+- button "Tools Settings"
+- heading "test message to verify duplication fix" [level=2]
+- text: 50a224d5-bc54-41f3-a8e0-17616a17b03b
+- button "Chat":
+  - img
+  - text: Chat
+- button "Shell":
+  - img
+  - text: Shell
+- button "Files":
+  - img
+  - text: Files
+- button "Source Control":
+  - img
+  - text: Source Control
+- text: test message to verify duplication fix 1:33:41 AM U
+- img "Claude"
+- text: Claude I understand. This is a test message to verify the duplication fix is working properly. The message came through clearly without any duplication issues. 1:33:44 AM
+- button "Default Mode"
+- button "Choose File"
+- textbox "Ask Claude to help with your code... (@ to reference files)"
+- button "Attach images":
+  - img
+- button [disabled]:
+  - img
+- text: Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files
+- button "Open settings panel"
+- heading "Quick Settings" [level=3]
+- heading "Appearance" [level=4]
+- text: Dark Mode
+- switch "Toggle dark mode":
+  - text: Toggle dark mode
+  - img
+- heading "Tool Display" [level=4]
+- text: Auto-expand tools
+- checkbox "Auto-expand tools"
+- text: Show raw parameters
+- checkbox "Show raw parameters"
+- heading "View Options" [level=4]
+- text: Auto-scroll to bottom
+- checkbox "Auto-scroll to bottom" [checked]
+- heading "Input Settings" [level=4]
+- text: Send by Ctrl+Enter
+- checkbox "Send by Ctrl+Enter"
+- paragraph: When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.
+```

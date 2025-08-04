@@ -160,7 +160,7 @@ function MainContent({
                     {selectedSession.summary}
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName} <span className="hidden sm:inline">• {selectedSession.id}</span>
+                    <span className="hidden sm:inline">{selectedSession.id}</span>
                   </div>
                 </div>
               ) : activeTab === 'chat' && !selectedSession ? (
@@ -169,7 +169,7 @@ function MainContent({
                     New Session
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName}
+                    Ready to start
                   </div>
                 </div>
               ) : (
@@ -178,7 +178,7 @@ function MainContent({
                     {activeTab === 'files' ? 'Project Files' : activeTab === 'git' ? 'Source Control' : 'Project'}
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName}
+                    Current project
                   </div>
                 </div>
               )}

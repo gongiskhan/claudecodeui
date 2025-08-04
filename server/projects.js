@@ -36,14 +36,28 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
   let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
   
-  // Try to read package.json from the project path
+  // SPECIAL HANDLING FOR WORKTREES - NEVER use package.json for worktree display names
+  // Check if this is a worktree path (contains '/worktrees/' and ends with version)
+  if (projectPath.includes('/worktrees/') && projectPath.match(/-v\d+$/)) {
+    const parts = projectPath.split('/');
+    const worktreeName = parts[parts.length - 1]; // e.g., "agendamente-v2"
+    
+    const lastDashIndex = worktreeName.lastIndexOf('-v');
+    if (lastDashIndex !== -1) {
+      const projectName = worktreeName.substring(0, lastDashIndex);
+      const version = worktreeName.substring(lastDashIndex + 1).toUpperCase();
+      return `${projectName} - ${version}`;
+    }
+  }
+  
+  // For non-worktree projects, try to read package.json
   try {
     const packageJsonPath = path.join(projectPath, 'package.json');
     const packageData = await fs.readFile(packageJsonPath, 'utf8');
     const packageJson = JSON.parse(packageData);
     
-    // Return the name from package.json if it exists
-    if (packageJson.name) {
+    // Return the name from package.json if it exists (but not for worktrees)
+    if (packageJson.name && !projectPath.includes('/worktrees/')) {
       return packageJson.name;
     }
   } catch (error) {
@@ -81,10 +95,10 @@ async function extractProjectDirectory(projectName) {
     
     for (const entry of worktreeEntries) {
       if (entry.isDirectory() && entry.name.includes('-v')) {
-        // Check if the encoded project name matches this worktree directory name
-        const encodedName = entry.name.replace(/\//g, '-');
-        if (encodedName === projectName) {
-          const worktreePath = path.join(worktreesBasePath, entry.name);
+        // Check if the encoded project name matches this worktree directory
+        const worktreePath = path.join(worktreesBasePath, entry.name);
+        const encodedWorktreePath = worktreePath.replace(/\//g, '-');
+        if (encodedWorktreePath === projectName) {
           // Verify it's a valid git worktree
           try {
             await fs.access(path.join(worktreePath, '.git'));
@@ -284,8 +298,9 @@ async function getProjects() {
       if (entry.isDirectory()) {
         existingProjects.add(entry.name);
         
-        // Only include if manually added in config or if it's a worktree-related project
-        if (config[entry.name]?.manuallyAdded || entry.name.includes('worktrees')) {
+        // Only include if manually added in config 
+        // (EXCLUDE worktree-related projects as they're already added above)
+        if (config[entry.name]?.manuallyAdded && !entry.name.includes('worktrees')) {
           const projectPath = path.join(claudeDir, entry.name);
           
           // Extract actual project directory from JSONL sessions

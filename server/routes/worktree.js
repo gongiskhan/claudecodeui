@@ -41,23 +41,26 @@ function getProjectName() {
 function executeGitCommand(command, cwd) {
   return new Promise((resolve, reject) => {
     const [cmd, ...args] = command.split(' ');
-    const process = spawn(cmd, args, { 
+    const fullCmd = cmd === 'git' ? 'git' : cmd; // Use system git from PATH
+    const childProcess = spawn(fullCmd, args, { 
       cwd, 
-      stdio: ['pipe', 'pipe', 'pipe'] 
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true, // Use shell to resolve git from PATH
+      env: { ...process.env, PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:' + (process.env.PATH || '') }
     });
     
     let stdout = '';
     let stderr = '';
     
-    process.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       stdout += data.toString();
     });
     
-    process.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       stderr += data.toString();
     });
     
-    process.on('close', (code) => {
+    childProcess.on('close', (code) => {
       if (code === 0) {
         resolve(stdout.trim());
       } else {

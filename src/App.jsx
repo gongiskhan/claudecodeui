@@ -532,6 +532,7 @@ function AppContent() {
               currentVersion={currentVersion}
               messages={messages}
               onShowVersionModal={() => setShowVersionModal(true)}
+              isMobile={false}
             />
           </div>
         </div>
@@ -578,6 +579,7 @@ function AppContent() {
               currentVersion={currentVersion}
               messages={messages}
               onShowVersionModal={() => setShowVersionModal(true)}
+              isMobile={true}
             />
           </div>
         </div>
