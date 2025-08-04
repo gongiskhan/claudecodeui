@@ -10,31 +10,13 @@
 - heading "No matching projects" [level=3]
 - paragraph: Try adjusting your search term
 - button "Tools Settings"
-- heading "test message to verify duplication fix" [level=2]
-- text: 50a224d5-bc54-41f3-a8e0-17616a17b03b
-- button "Chat":
-  - img
-  - text: Chat
-- button "Shell":
-  - img
-  - text: Shell
-- button "Files":
-  - img
-  - text: Files
-- button "Source Control":
-  - img
-  - text: Source Control
-- text: test message to verify duplication fix 1:33:41 AM U
-- img "Claude"
-- text: Claude I understand. This is a test message to verify the duplication fix is working properly. The message came through clearly without any duplication issues. 1:33:44 AM
-- button "Default Mode"
-- button "Choose File"
-- textbox "Ask Claude to help with your code... (@ to reference files)"
-- button "Attach images":
-  - img
-- button [disabled]:
-  - img
-- text: Press Enter to send • Shift+Enter for new line • Tab to change modes • @ to reference files
+- img
+- heading "Choose Your Project" [level=2]
+- paragraph: Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.
+- paragraph:
+  - text: 💡
+  - strong: "Tip:"
+  - text: Create a new project by clicking the folder icon in the sidebar
 - button "Open settings panel"
 - heading "Quick Settings" [level=3]
 - heading "Appearance" [level=4]
