@@ -546,7 +546,14 @@ function handleChatConnection(ws) {
       
       if (data.type === 'claude-command') {
         console.log('💬 Claude command received');
-        await spawnClaude(data.command, data.options, ws);
+        // Don't await - let Claude processes run in parallel for different sessions
+        spawnClaude(data.command, data.options, ws).catch(error => {
+          console.error('❌ Claude spawn error:', error.message);
+          ws.send(JSON.stringify({
+            type: 'claude-error',
+            error: error.message
+          }));
+        });
       } else if (data.type === 'abort-session') {
         const success = abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({
