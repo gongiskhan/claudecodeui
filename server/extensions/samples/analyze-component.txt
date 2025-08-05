@@ -1,0 +1,62 @@
+---
+name: analyze-component
+description: Analyze a React component for performance, accessibility, and maintainability improvements
+classification: selectable
+version: 1.0.0
+author: Claude Code UI Team
+tags: [react, analysis, performance, accessibility, code-review]
+parameters:
+  - name: COMPONENT_NAME
+    type: string
+    description: Name or path of the React component to analyze
+    required: true
+  - name: FOCUS_AREA
+    type: string
+    description: Specific area to focus on (performance, accessibility, maintainability, all)
+    required: false
+    default: all
+---
+
+/analyze-component $COMPONENT_NAME --focus=$FOCUS_AREA
+
+Analyze the React component at @$COMPONENT_NAME and provide a comprehensive review focusing on $FOCUS_AREA. 
+
+Please examine the component for:
+
+**Performance Analysis:**
+- Re-rendering patterns and optimization opportunities
+- Memory leaks and cleanup issues  
+- Bundle size impact and code splitting opportunities
+- Expensive operations that could be memoized
+- Proper use of React.memo, useMemo, and useCallback
+
+**Accessibility Review:**
+- Semantic HTML usage
+- ARIA attributes and roles
+- Keyboard navigation support
+- Screen reader compatibility
+- Color contrast and visual accessibility
+- Focus management
+
+**Code Quality & Maintainability:**
+- Component structure and organization
+- Props interface design and TypeScript usage
+- Error handling and edge cases
+- Testing coverage gaps
+- Code reusability and composition patterns
+- Naming conventions and documentation
+
+**Best Practices Compliance:**
+- React hooks usage patterns
+- State management approach
+- Side effects handling
+- Component lifecycle management
+- Performance anti-patterns
+
+For each issue found, provide:
+1. Clear description of the problem
+2. Impact on user experience or developer experience  
+3. Specific code example showing the fix
+4. Explanation of why the improvement matters
+
+Prioritize recommendations by impact: Critical > High > Medium > Low

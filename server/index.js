@@ -42,6 +42,8 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import worktreeRoutes from './routes/worktree.js';
+import extensionRoutes from './routes/extensions.js';
+import ExtensionManager from './extensions/manager.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -190,6 +192,9 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Worktree API Routes (protected)
 app.use('/api/worktree', authenticateToken, worktreeRoutes);
+
+// Extension API Routes (protected)
+app.use('/api/v1/extensions', authenticateToken, extensionRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -1108,12 +1113,40 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 
 const PORT = process.env.PORT || 3000;
 
+// Initialize extension system
+async function initializeExtensionSystem() {
+  try {
+    console.log('🔧 Initializing extension system...');
+    const extensionManager = new ExtensionManager();
+    
+    // Check if extension directories exist
+    const { globalExists, projectExists } = await extensionManager.checkExtensionDirectories();
+    
+    if (!globalExists || !projectExists) {
+      console.log('📁 Creating extension directory structure...');
+      await extensionManager.initializeExtensionDirectories();
+      console.log('✅ Extension directories created');
+    } else {
+      console.log('✅ Extension directory structure verified');
+    }
+    
+    return extensionManager;
+  } catch (error) {
+    console.error('❌ Failed to initialize extension system:', error);
+    // Don't fail server startup for extension system issues
+    return null;
+  }
+}
+
 // Initialize database and start server
 async function startServer() {
   try {
     // Initialize authentication database
     await initializeDatabase();
     console.log('✅ Database initialization skipped (testing)');
+    
+    // Initialize extension system
+    const extensionManager = await initializeExtensionSystem();
     
     server.listen(PORT, '0.0.0.0', async () => {
       console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);

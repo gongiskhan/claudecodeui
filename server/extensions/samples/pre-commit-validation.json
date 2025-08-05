@@ -1,0 +1,19 @@
+{
+  "name": "pre-commit-validation",
+  "description": "Run linting, type checking, and tests before allowing commits",
+  "event": "PreToolUse", 
+  "condition": "tool === 'git_commit' || tool === 'bash' && command.includes('git commit')",
+  "command": "npm run lint && npm run typecheck && npm run test:unit",
+  "timeout": 60000,
+  "enabled": true,
+  "classification": "default",
+  "version": "1.0.0",
+  "author": "Claude Code UI Team",
+  "tags": ["git", "quality", "testing", "automation"],
+  "settings": {
+    "allowSkip": true,
+    "skipFlag": "--no-verify",
+    "failOnWarnings": false,
+    "parallelExecution": true
+  }
+}
