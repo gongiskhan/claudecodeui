@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Folder, Terminal, GitBranch, Globe } from 'lucide-react';
+import { MessageSquare, Folder, Terminal, GitBranch, Globe, Bot } from 'lucide-react';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   // Detect dark mode
@@ -24,6 +24,11 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
       id: 'git',
       icon: GitBranch,
       onClick: () => setActiveTab('git')
+    },
+    {
+      id: 'agents',
+      icon: Bot,
+      onClick: () => setActiveTab('agents')
     }
   ];
 

@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import crypto from 'crypto';
 import ExtensionManager from '../extensions/manager.js';
 import ExtensionClassifier from '../extensions/classifier.js';
+import GitHubSourceHandler from '../extensions/sources/github.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -31,6 +32,7 @@ const upload = multer({
 // Initialize extension system components
 let extensionManager;
 let extensionClassifier;
+let githubHandler;
 
 // Initialize middleware
 router.use((req, res, next) => {
@@ -39,6 +41,9 @@ router.use((req, res, next) => {
   }
   if (!extensionClassifier) {
     extensionClassifier = new ExtensionClassifier(extensionManager, req.app.locals.db);
+  }
+  if (!githubHandler) {
+    githubHandler = new GitHubSourceHandler();
   }
   next();
 });
@@ -243,9 +248,37 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
       metadata: JSON.parse(config)
     }, classification);
 
-    // Handle file upload if present
+    // Handle different installation sources
     let filePath = null;
-    if (req.file) {
+    let actualConfig = config;
+    let actualName = name;
+    let actualDescription = description;
+    
+    if (source === 'github' && source_url) {
+      // GitHub installation
+      try {
+        const targetDir = extensionManager.getPaths().global[type + 's'] || extensionManager.getPaths().global.extensions;
+        
+        const githubResult = await githubHandler.installFromGitHub(source_url, {
+          name,
+          description,
+          classification: validatedClassification,
+          version,
+          author,
+          targetDirectory: targetDir
+        });
+        
+        // Use GitHub installation results
+        filePath = githubResult.file_path;
+        actualName = githubResult.name;
+        actualDescription = githubResult.description;
+        actualConfig = githubResult.config;
+        
+      } catch (error) {
+        throw new Error(`GitHub installation failed: ${error.message}`);
+      }
+    } else if (req.file) {
+      // File upload installation
       const fileName = `${extensionId}${path.extname(req.file.originalname)}`;
       const destinationPath = path.join(
         extensionManager.getPaths().global[type + 's'] || extensionManager.getPaths().global.extensions,
@@ -255,6 +288,8 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
       await fs.mkdir(path.dirname(destinationPath), { recursive: true });
       await fs.rename(req.file.path, destinationPath);
       filePath = destinationPath;
+    } else {
+      throw new Error('No installation source provided (file or GitHub URL required)');
     }
 
     // Insert extension into database
@@ -267,15 +302,15 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
 
     const result = stmt.run(
       extensionId,
-      name,
-      description,
+      actualName,
+      actualDescription,
       version,
       validatedClassification,
       type,
       source,
       source_url,
       filePath,
-      config,
+      actualConfig,
       userId
     );
 
@@ -300,8 +335,9 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
 
     res.status(201).json({
       id: extensionId,
-      name,
+      name: actualName,
       classification: validatedClassification,
+      source: source,
       message: 'Extension installed successfully'
     });
 
@@ -608,6 +644,88 @@ router.post('/:id/disable', authenticateToken, async (req, res) => {
     console.error('Error disabling extension:', error);
     res.status(400).json({ 
       error: 'Failed to disable extension',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/sources/github/search
+ * Search GitHub repositories for extensions
+ */
+router.get('/sources/github/search', authenticateToken, async (req, res) => {
+  try {
+    const { q: query, limit = 10 } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    const repositories = await githubHandler.searchRepositories(query, parseInt(limit));
+    
+    res.json({
+      repositories,
+      query,
+      count: repositories.length
+    });
+
+  } catch (error) {
+    console.error('Error searching GitHub repositories:', error);
+    res.status(500).json({ 
+      error: 'Failed to search repositories',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/sources/github/popular
+ * Get popular extension repositories
+ */
+router.get('/sources/github/popular', authenticateToken, async (req, res) => {
+  try {
+    const repositories = await githubHandler.getPopularRepositories();
+    
+    res.json({
+      repositories,
+      count: repositories.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching popular repositories:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch popular repositories',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/v1/extensions/sources/github/discover
+ * Discover extensions in a GitHub repository
+ */
+router.post('/sources/github/discover', authenticateToken, async (req, res) => {
+  try {
+    const { url } = req.body;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'GitHub URL is required' });
+    }
+
+    const { owner, repo, branch } = githubHandler.parseGitHubUrl(url);
+    const extensions = await githubHandler.discoverExtensions(owner, repo, branch);
+    
+    res.json({
+      repository: `${owner}/${repo}`,
+      branch,
+      extensions,
+      count: extensions.length
+    });
+
+  } catch (error) {
+    console.error('Error discovering extensions:', error);
+    res.status(400).json({ 
+      error: 'Failed to discover extensions',
       details: error.message 
     });
   }
