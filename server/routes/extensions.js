@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import ExtensionManager from '../extensions/manager.js';
 import ExtensionClassifier from '../extensions/classifier.js';
 import GitHubSourceHandler from '../extensions/sources/github.js';
+import { getAllTemplates, getTemplatesByCategory, getTemplateCategories, searchTemplates } from '../extensions/templates/commands.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -726,6 +727,238 @@ router.post('/sources/github/discover', authenticateToken, async (req, res) => {
     console.error('Error discovering extensions:', error);
     res.status(400).json({ 
       error: 'Failed to discover extensions',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/v1/extensions/:id/execute
+ * Log command execution
+ */
+router.post('/:id/execute', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      project_path, 
+      parameters = {}, 
+      execution_time = 0,
+      status = 'success',
+      error_message,
+      generated_text 
+    } = req.body;
+
+    // Check if extension exists
+    const extensionStmt = req.app.locals.db.prepare('SELECT * FROM extensions WHERE id = ?');
+    const extension = extensionStmt.get(id);
+
+    if (!extension) {
+      return res.status(404).json({ error: 'Extension not found' });
+    }
+
+    // Log the execution
+    const logStmt = req.app.locals.db.prepare(`
+      INSERT INTO extension_logs (
+        extension_id, project_path, event_type, status, 
+        execution_time, error_message, metadata
+      ) VALUES (?, ?, 'execution', ?, ?, ?, ?)
+    `);
+    
+    logStmt.run(
+      id,
+      project_path,
+      status,
+      execution_time,
+      error_message,
+      JSON.stringify({
+        parameters,
+        generated_text: generated_text ? generated_text.substring(0, 500) : null, // Store first 500 chars
+        timestamp: new Date().toISOString()
+      })
+    );
+
+    res.json({ 
+      message: 'Execution logged successfully',
+      extension_id: id
+    });
+
+  } catch (error) {
+    console.error('Error logging command execution:', error);
+    res.status(500).json({ 
+      error: 'Failed to log execution',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/:id/history
+ * Get command execution history
+ */
+router.get('/:id/history', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+
+    const stmt = req.app.locals.db.prepare(`
+      SELECT * FROM extension_logs 
+      WHERE extension_id = ? AND event_type = 'execution'
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `);
+
+    const history = stmt.all(id, parseInt(limit), parseInt(offset));
+
+    // Get total count
+    const countStmt = req.app.locals.db.prepare(`
+      SELECT COUNT(*) as total FROM extension_logs 
+      WHERE extension_id = ? AND event_type = 'execution'
+    `);
+    const { total } = countStmt.get(id);
+
+    res.json({
+      history: history.map(entry => ({
+        ...entry,
+        metadata: entry.metadata ? JSON.parse(entry.metadata) : {}
+      })),
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        hasMore: (parseInt(offset) + parseInt(limit)) < total
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching execution history:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch execution history',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/analytics/usage
+ * Get usage analytics for extensions
+ */
+router.get('/analytics/usage', authenticateToken, async (req, res) => {
+  try {
+    const { project_path, days = 30 } = req.query;
+    const dateLimit = new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000).toISOString();
+
+    let query = `
+      SELECT 
+        e.id,
+        e.name,
+        e.type,
+        e.classification,
+        COUNT(l.id) as execution_count,
+        AVG(l.execution_time) as avg_execution_time,
+        MAX(l.created_at) as last_used,
+        SUM(CASE WHEN l.status = 'success' THEN 1 ELSE 0 END) as success_count,
+        SUM(CASE WHEN l.status = 'error' THEN 1 ELSE 0 END) as error_count
+      FROM extensions e
+      LEFT JOIN extension_logs l ON e.id = l.extension_id 
+        AND l.event_type = 'execution' 
+        AND l.created_at >= ?
+    `;
+
+    const params = [dateLimit];
+
+    if (project_path) {
+      query += ' AND l.project_path = ?';
+      params.push(project_path);
+    }
+
+    query += `
+      GROUP BY e.id, e.name, e.type, e.classification
+      ORDER BY execution_count DESC
+    `;
+
+    const stmt = req.app.locals.db.prepare(query);
+    const analytics = stmt.all(...params);
+
+    // Calculate success rates
+    const processedAnalytics = analytics.map(item => ({
+      ...item,
+      success_rate: item.execution_count > 0 ? (item.success_count / item.execution_count) * 100 : 0,
+      avg_execution_time: Math.round(item.avg_execution_time || 0)
+    }));
+
+    res.json({
+      analytics: processedAnalytics,
+      period: {
+        days: parseInt(days),
+        from: dateLimit,
+        to: new Date().toISOString()
+      },
+      summary: {
+        total_extensions: processedAnalytics.length,
+        total_executions: processedAnalytics.reduce((sum, item) => sum + item.execution_count, 0),
+        most_used: processedAnalytics[0]?.name || null
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching usage analytics:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch usage analytics',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/templates
+ * Get all command templates
+ */
+router.get('/templates', authenticateToken, async (req, res) => {
+  try {
+    const { category, search } = req.query;
+    
+    let templates;
+    
+    if (search) {
+      templates = searchTemplates(search);
+    } else if (category) {
+      templates = getTemplatesByCategory(category);
+    } else {
+      templates = getAllTemplates();
+    }
+    
+    res.json({
+      templates,
+      categories: getTemplateCategories(),
+      count: templates.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching command templates:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch command templates',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/v1/extensions/templates/categories
+ * Get template categories
+ */
+router.get('/templates/categories', authenticateToken, async (req, res) => {
+  try {
+    const categories = getTemplateCategories();
+    
+    res.json({
+      categories,
+      count: categories.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching template categories:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch template categories',
       details: error.message 
     });
   }

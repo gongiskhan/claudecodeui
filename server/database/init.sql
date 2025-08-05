@@ -82,6 +82,36 @@ CREATE TABLE IF NOT EXISTS extension_security (
     UNIQUE(extension_id, permission_type)
 );
 
+-- Hook system tables
+CREATE TABLE IF NOT EXISTS hooks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    event TEXT NOT NULL,
+    condition TEXT DEFAULT 'always',
+    condition_params JSON,
+    command TEXT NOT NULL,
+    timeout INTEGER DEFAULT 30000,
+    enabled BOOLEAN DEFAULT 1,
+    project_path TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER REFERENCES users(id)
+);
+
+-- Hook execution logs
+CREATE TABLE IF NOT EXISTS hook_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hook_id TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE,
+    project_path TEXT,
+    event_type TEXT NOT NULL,
+    status TEXT CHECK(status IN ('success', 'error', 'timeout')) NOT NULL,
+    execution_time INTEGER, -- milliseconds
+    error_message TEXT,
+    metadata JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for extension system
 CREATE INDEX IF NOT EXISTS idx_extensions_classification ON extensions(classification);
 CREATE INDEX IF NOT EXISTS idx_extensions_type ON extensions(type);
@@ -92,3 +122,46 @@ CREATE INDEX IF NOT EXISTS idx_project_extensions_extension ON project_extension
 CREATE INDEX IF NOT EXISTS idx_extension_logs_extension ON extension_logs(extension_id);
 CREATE INDEX IF NOT EXISTS idx_extension_logs_created ON extension_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_extension_security_extension ON extension_security(extension_id);
+
+-- Workflow system tables
+CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    trigger JSON NOT NULL,
+    steps JSON NOT NULL,
+    settings JSON,
+    enabled BOOLEAN DEFAULT 1,
+    project_path TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER REFERENCES users(id)
+);
+
+-- Workflow execution logs
+CREATE TABLE IF NOT EXISTS workflow_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    project_path TEXT,
+    event_type TEXT NOT NULL,
+    status TEXT CHECK(status IN ('success', 'error', 'timeout')) NOT NULL,
+    execution_time INTEGER, -- milliseconds
+    error_message TEXT,
+    metadata JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for hook system
+CREATE INDEX IF NOT EXISTS idx_hooks_event ON hooks(event);
+CREATE INDEX IF NOT EXISTS idx_hooks_enabled ON hooks(enabled);
+CREATE INDEX IF NOT EXISTS idx_hooks_project ON hooks(project_path);
+CREATE INDEX IF NOT EXISTS idx_hook_logs_hook ON hook_logs(hook_id);
+CREATE INDEX IF NOT EXISTS idx_hook_logs_created ON hook_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_hook_logs_event ON hook_logs(event_type);
+
+-- Indexes for workflow system
+CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+CREATE INDEX IF NOT EXISTS idx_workflows_project ON workflows(project_path);
+CREATE INDEX IF NOT EXISTS idx_workflow_logs_workflow ON workflow_logs(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_logs_created ON workflow_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_logs_event ON workflow_logs(event_type);
