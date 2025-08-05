@@ -39,6 +39,8 @@ function Shell({ selectedProject, selectedSession, isActive }) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [shellMode, setShellMode] = useState('claude'); // 'claude' or 'general'
+  const [customCommand, setCustomCommand] = useState('');
 
   // Connect to shell function
   const connectToShell = () => {
@@ -435,7 +437,9 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 type: 'init',
                 projectPath: selectedProject.fullPath || selectedProject.path,
                 sessionId: selectedSession?.id,
-                hasSession: !!selectedSession,
+                hasSession: !!selectedSession && shellMode === 'claude',
+                mode: shellMode,
+                command: shellMode === 'general' ? customCommand : undefined,
                 cols: terminal.current.cols,
                 rows: terminal.current.rows
               };
@@ -588,7 +592,49 @@ function Shell({ selectedProject, selectedSession, isActive }) {
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
-            <div className="text-center max-w-sm w-full">
+            <div className="text-center max-w-md w-full">
+              {/* Mode Selection */}
+              <div className="mb-4">
+                <div className="flex items-center justify-center space-x-4 mb-3">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="shellMode"
+                      value="claude"
+                      checked={shellMode === 'claude'}
+                      onChange={(e) => setShellMode(e.target.value)}
+                      className="text-green-600"
+                    />
+                    <span className="text-white">Claude CLI</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="shellMode"
+                      value="general"
+                      checked={shellMode === 'general'}
+                      onChange={(e) => setShellMode(e.target.value)}
+                      className="text-green-600"
+                    />
+                    <span className="text-white">General Shell</span>
+                  </label>
+                </div>
+                
+                {/* Command Input for General Mode */}
+                {shellMode === 'general' && (
+                  <div className="mb-3">
+                    <input
+                      type="text"
+                      placeholder="Command to run (optional, e.g., npm start)"
+                      value={customCommand}
+                      onChange={(e) => setCustomCommand(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-green-500 focus:outline-none text-sm"
+                    />
+                    <p className="text-gray-400 text-xs mt-1">Leave empty for interactive bash shell</p>
+                  </div>
+                )}
+              </div>
+              
               <button
                 onClick={connectToShell}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
@@ -597,13 +643,19 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span>Continue in Shell</span>
+                <span>{shellMode === 'claude' ? 'Continue in Claude' : 'Start Shell'}</span>
               </button>
+              
               <p className="text-gray-400 text-sm mt-3 px-2">
-                {selectedSession ? 
-                  `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
-                  'Start a new Claude session'
-                }
+                {shellMode === 'claude' ? (
+                  selectedSession ? 
+                    `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
+                    'Start a new Claude session'
+                ) : (
+                  customCommand ? 
+                    `Execute: ${customCommand}` :
+                    'Interactive bash shell'
+                )}
               </p>
             </div>
           </div>
@@ -618,7 +670,12 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 <span className="text-base font-medium">Connecting to shell...</span>
               </div>
               <p className="text-gray-400 text-sm mt-3 px-2">
-                Starting Claude CLI in {selectedProject.displayName}
+                {shellMode === 'claude' ? 
+                  `Starting Claude CLI in ${selectedProject.displayName}` :
+                  customCommand ? 
+                    `Executing: ${customCommand}` :
+                    `Starting shell in ${selectedProject.displayName}`
+                }
               </p>
             </div>
           </div>

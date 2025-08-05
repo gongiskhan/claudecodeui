@@ -586,17 +586,43 @@ function handleShellConnection(ws) {
       const data = JSON.parse(message);
       
       if (data.type === 'init') {
-        // Initialize shell with project path and session info
+        // Initialize shell with project path and optional session info
         const projectPath = data.projectPath || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
+        const mode = data.mode || 'claude'; // 'claude' or 'general'
+        const customCommand = data.command; // For general mode
         
-        console.log('🚀 Shell init:', hasSession ? 'Resume' : 'New');
+        console.log('🚀 Shell init:', mode === 'claude' ? (hasSession ? 'Resume Claude' : 'New Claude') : `General shell`);
         
-        // First send a welcome message
-        const welcomeMsg = hasSession ? 
-          `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-          `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+        // First send a welcome message based on mode
+        let welcomeMsg;
+        let shellCommand;
+        
+        if (mode === 'claude') {
+          welcomeMsg = hasSession ? 
+            `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+            `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+          
+          // Build Claude command
+          let claudeCommand = 'claude';
+          if (hasSession && sessionId) {
+            claudeCommand = `claude --resume ${sessionId} || claude`;
+          }
+          shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
+        } else {
+          // General shell mode
+          welcomeMsg = customCommand ? 
+            `\x1b[36mExecuting: ${customCommand} in ${projectPath}\x1b[0m\r\n` :
+            `\x1b[36mGeneral shell in: ${projectPath}\x1b[0m\r\n`;
+          
+          if (customCommand) {
+            shellCommand = `cd "${projectPath}" && ${customCommand}`;
+          } else {
+            // Start an interactive bash shell in the project directory
+            shellCommand = 'bash';
+          }
+        }
         
         ws.send(JSON.stringify({
           type: 'output',
@@ -604,32 +630,55 @@ function handleShellConnection(ws) {
         }));
         
         try {
-          // Build shell command that changes to project directory first, then runs claude
-          let claudeCommand = 'claude';
+          // Configure PTY spawn based on mode
+          let spawnArgs, spawnOptions;
           
-          if (hasSession && sessionId) {
-            // Try to resume session, but with fallback to new session if it fails
-            claudeCommand = `claude --resume ${sessionId} || claude`;
+          // Create enhanced environment with proper PATH for npm and node
+          const enhancedEnv = {
+            ...process.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+            FORCE_COLOR: '3',
+            BROWSER: 'echo "OPEN_URL:"',
+            // Ensure PATH includes common node/npm locations
+            PATH: [
+              `${projectPath}/node_modules/.bin`, // Project-specific binaries
+              process.env.PATH,
+              '/usr/local/bin', // Common npm global install location
+              '/opt/homebrew/bin', // Homebrew on Apple Silicon
+              '/usr/bin',
+              '/bin'
+            ].filter(Boolean).join(':')
+          };
+          
+          if (mode === 'general' && !customCommand) {
+            // For interactive bash shell, use login shell to load full environment
+            spawnOptions = {
+              name: 'xterm-256color',
+              cols: data.cols || 80,
+              rows: data.rows || 24,
+              cwd: projectPath, // Start directly in project directory
+              env: {
+                ...enhancedEnv,
+                PS1: '\\[\\e[1;32m\\]\\u@\\h\\[\\e[0m\\]:\\[\\e[1;34m\\]\\w\\[\\e[0m\\]$ ', // Nice colored prompt
+              }
+            };
+            // Use login shell to ensure proper environment loading
+            shellProcess = pty.spawn('bash', ['-l'], spawnOptions);
+          } else {
+            // For Claude mode or general mode with custom command
+            spawnOptions = {
+              name: 'xterm-256color',
+              cols: data.cols || 80,
+              rows: data.rows || 24,
+              cwd: projectPath, // Use project path as cwd for all commands
+              env: enhancedEnv
+            };
+            
+            // Use login shell for better environment loading
+            const wrappedCommand = `source ~/.bash_profile 2>/dev/null || source ~/.bashrc 2>/dev/null || true; ${shellCommand}`;
+            shellProcess = pty.spawn('bash', ['-l', '-c', wrappedCommand], spawnOptions);
           }
-          
-          // Create shell command that cds to the project directory first
-          const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
-          
-          // Start shell using PTY for proper terminal emulation
-          shellProcess = pty.spawn('bash', ['-c', shellCommand], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 24,
-            cwd: process.env.HOME || '/', // Start from home directory
-            env: { 
-              ...process.env,
-              TERM: 'xterm-256color',
-              COLORTERM: 'truecolor',
-              FORCE_COLOR: '3',
-              // Override browser opening commands to echo URL for detection
-              BROWSER: 'echo "OPEN_URL:"'
-            }
-          });
           
           // Handle data output
           shellProcess.onData((data) => {
