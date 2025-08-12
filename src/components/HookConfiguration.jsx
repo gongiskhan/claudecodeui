@@ -52,7 +52,7 @@ function HookConfiguration() {
       setLoading(true);
       const response = await fetch('/api/v1/hooks', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         }
       });
 
@@ -75,7 +75,7 @@ function HookConfiguration() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         },
         body: JSON.stringify({ enabled })
       });
@@ -99,7 +99,7 @@ function HookConfiguration() {
       const response = await fetch(`/api/v1/hooks/${hookId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         }
       });
 
@@ -121,7 +121,7 @@ function HookConfiguration() {
       const response = await fetch(`/api/v1/hooks/${hookId}/test`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         }
       });
 
@@ -449,7 +449,7 @@ function HookConfiguration() {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                      'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
                     },
                     body: JSON.stringify({
                       ...workflowData,
@@ -491,7 +491,7 @@ function HookDetailsPanel({ hook, onClose, onUpdate }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         },
         body: JSON.stringify(editData)
       });
@@ -695,7 +695,7 @@ function CreateHookModal({ onClose, onCreate, events, conditions }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         },
         body: JSON.stringify(formData)
       });

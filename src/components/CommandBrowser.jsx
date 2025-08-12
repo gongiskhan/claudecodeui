@@ -12,6 +12,7 @@ const CommandBrowser = ({ projectPath, onExecuteCommand, onCreateCommand }) => {
   const [selectedCommand, setSelectedCommand] = useState(null);
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [showExecuteModal, setShowExecuteModal] = useState(false);
+  const [showSourcesBrowser, setShowSourcesBrowser] = useState(false);
 
   useEffect(() => {
     fetchCommands();
@@ -20,20 +21,19 @@ const CommandBrowser = ({ projectPath, onExecuteCommand, onCreateCommand }) => {
   const fetchCommands = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth-token');
       const params = new URLSearchParams({
-        type: 'command',
         ...(selectedScope !== 'all' && { classification: selectedScope }),
         ...(projectPath && { project_path: projectPath })
       });
 
-      const response = await fetch(`/api/v1/extensions?${params}`, {
+      const response = await fetch(`/api/v1/commands?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (response.ok) {
         const data = await response.json();
-        setCommands(data.extensions || []);
+        setCommands(data.commands || []);
       } else {
         console.error('Failed to fetch commands');
       }
@@ -72,12 +72,21 @@ const CommandBrowser = ({ projectPath, onExecuteCommand, onCreateCommand }) => {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Commands
           </h2>
-          <Button
-            onClick={() => setShowCreateWizard(true)}
-            className="text-sm"
-          >
-            + Create Command
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowSourcesBrowser(true)}
+              variant="outline"
+              className="text-sm"
+            >
+              Browse Sources
+            </Button>
+            <Button
+              onClick={() => setShowCreateWizard(true)}
+              className="text-sm"
+            >
+              + Create Command
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -177,27 +186,26 @@ const CommandBrowser = ({ projectPath, onExecuteCommand, onCreateCommand }) => {
           projectPath={projectPath}
         />
       )}
+
+      {/* Sources Browser */}
+      {showSourcesBrowser && (
+        <SourcesBrowser
+          onClose={() => setShowSourcesBrowser(false)}
+          onImport={() => {
+            setShowSourcesBrowser(false);
+            fetchCommands();
+          }}
+          projectPath={projectPath}
+        />
+      )}
     </div>
   );
 };
 
 const CommandCard = ({ command, onExecute, onViewDetails, getScopeColor }) => {
-  const parseParameters = (template) => {
-    const parameterPattern = /\$([A-Z_]+)/g;
-    const parameters = [];
-    let match;
-
-    while ((match = parameterPattern.exec(template)) !== null) {
-      const paramName = match[1];
-      if (!parameters.find(p => p.name === paramName)) {
-        parameters.push({ name: paramName });
-      }
-    }
-    return parameters;
-  };
-
-  const template = command.config ? JSON.parse(command.config).template || '' : '';
-  const parameters = parseParameters(template);
+  const config = command.config ? JSON.parse(command.config) : {};
+  const template = config.template || command.template || '';
+  const usesArguments = config.uses_arguments || template.includes('$ARGUMENTS');
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
@@ -225,26 +233,16 @@ const CommandCard = ({ command, onExecute, onViewDetails, getScopeColor }) => {
             </div>
           )}
 
-          {/* Parameters */}
-          {parameters.length > 0 && (
+          {/* Arguments */}
+          {usesArguments && (
             <div className="mb-3">
               <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                Parameters ({parameters.length}):
+                This command accepts arguments
               </div>
               <div className="flex flex-wrap gap-1">
-                {parameters.slice(0, 3).map((param, index) => (
-                  <span
-                    key={index}
-                    className="inline-block px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded"
-                  >
-                    ${param.name}
-                  </span>
-                ))}
-                {parameters.length > 3 && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    +{parameters.length - 3} more
-                  </span>
-                )}
+                <span className="inline-block px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                  $ARGUMENTS
+                </span>
               </div>
             </div>
           )}
@@ -431,58 +429,31 @@ const CommandDetailsModal = ({ command, onClose, onExecute, getScopeColor }) => 
 };
 
 const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => {
-  const [parameters, setParameters] = useState({});
+  const [argumentsText, setArgumentsText] = useState('');
   const [preview, setPreview] = useState('');
   const [executing, setExecuting] = useState(false);
 
   const config = command.config ? JSON.parse(command.config) : {};
-  const template = config.template || '';
-  const parameterDefs = config.parameters || [];
-
-  // Extract parameters from template if not defined in config
-  const extractedParams = [];
-  const parameterPattern = /\$([A-Z_]+)/g;
-  let match;
-  while ((match = parameterPattern.exec(template)) !== null) {
-    const paramName = match[1];
-    if (!extractedParams.find(p => p.name === paramName)) {
-      extractedParams.push({
-        name: paramName,
-        type: 'string',
-        required: true,
-        description: `Parameter ${paramName}`
-      });
-    }
-  }
-
-  const allParameters = parameterDefs.length > 0 ? parameterDefs : extractedParams;
+  const template = config.template || command.template || '';
+  const usesArguments = config.uses_arguments || template.includes('$ARGUMENTS');
 
   useEffect(() => {
     // Generate preview
     let previewText = template;
-    Object.entries(parameters).forEach(([key, value]) => {
-      if (value) {
-        previewText = previewText.replace(new RegExp(`\\$${key}`, 'g'), value);
-      }
-    });
+    if (usesArguments && argumentsText) {
+      previewText = previewText.replace(/\$ARGUMENTS/g, argumentsText);
+    }
     setPreview(previewText);
-  }, [parameters, template]);
+  }, [argumentsText, template, usesArguments]);
 
-  const handleParameterChange = (paramName, value) => {
-    setParameters(prev => ({
-      ...prev,
-      [paramName]: value
-    }));
+  const handleArgumentsChange = (value) => {
+    setArgumentsText(value);
   };
 
   const handleExecute = async () => {
-    // Validate required parameters
-    const missingParams = allParameters
-      .filter(param => param.required && !parameters[param.name])
-      .map(param => param.name);
-
-    if (missingParams.length > 0) {
-      alert(`Missing required parameters: ${missingParams.join(', ')}`);
+    // Validate arguments if required
+    if (usesArguments && !argumentsText.trim()) {
+      alert('Please provide arguments for this command');
       return;
     }
 
@@ -493,13 +464,13 @@ const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => 
       // Execute the command by passing the generated text to the parent
       const executionData = {
         command: command,
-        parameters: parameters,
+        arguments: argumentsText,
         generatedText: preview,
         projectPath: projectPath
       };
 
       // Log the execution
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth-token');
       const executionTime = Date.now() - startTime;
       
       try {
@@ -511,7 +482,7 @@ const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => 
           },
           body: JSON.stringify({
             project_path: projectPath,
-            parameters: parameters,
+            arguments: argumentsText,
             execution_time: executionTime,
             status: 'success',
             generated_text: preview
@@ -527,7 +498,7 @@ const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => 
       console.error('Command execution error:', error);
       
       // Log the error
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth-token');
       const executionTime = Date.now() - startTime;
       
       try {
@@ -539,7 +510,7 @@ const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => 
           },
           body: JSON.stringify({
             project_path: projectPath,
-            parameters: parameters,
+            arguments: argumentsText,
             execution_time: executionTime,
             status: 'error',
             error_message: error.message,
@@ -575,60 +546,34 @@ const CommandExecutionModal = ({ command, onClose, onExecute, projectPath }) => 
         </div>
 
         <div className="flex h-[70vh]">
-          {/* Parameters Panel */}
+          {/* Arguments Panel */}
           <div className="w-1/2 border-r border-gray-200 dark:border-gray-700">
             <div className="p-6">
               <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-4">
-                Parameters
+                Arguments
               </h3>
               
-              {allParameters.length === 0 ? (
+              {!usesArguments ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm">
-                  This command has no parameters.
+                  This command does not accept arguments.
                 </p>
               ) : (
-                <ScrollArea className="max-h-96">
-                  <div className="space-y-4">
-                    {allParameters.map((param, index) => (
-                      <div key={index}>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          ${param.name} {param.required && <span className="text-red-500">*</span>}
-                        </label>
-                        {param.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            {param.description}
-                          </p>
-                        )}
-                        {param.type === 'file' || param.type === 'directory' ? (
-                          <input
-                            type="text"
-                            placeholder={param.type === 'file' ? 'File path...' : 'Directory path...'}
-                            value={parameters[param.name] || ''}
-                            onChange={(e) => handleParameterChange(param.name, e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                          />
-                        ) : param.type === 'boolean' ? (
-                          <select
-                            value={parameters[param.name] || 'false'}
-                            onChange={(e) => handleParameterChange(param.name, e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="false">False</option>
-                            <option value="true">True</option>
-                          </select>
-                        ) : (
-                          <textarea
-                            placeholder={`Enter ${param.name.toLowerCase()}...`}
-                            value={parameters[param.name] || ''}
-                            onChange={(e) => handleParameterChange(param.name, e.target.value)}
-                            rows={param.type === 'string' ? 2 : 4}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                          />
-                        )}
-                      </div>
-                    ))}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Command Arguments
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      Enter the arguments that will replace $ARGUMENTS in the command template.
+                    </p>
+                    <textarea
+                      value={argumentsText}
+                      onChange={(e) => handleArgumentsChange(e.target.value)}
+                      className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      placeholder="Enter command arguments here..."
+                    />
                   </div>
-                </ScrollArea>
+                </div>
               )}
             </div>
           </div>
@@ -693,45 +638,55 @@ const CommandCreateWizard = ({ onClose, onCreate, projectPath }) => {
   const fetchTemplates = async () => {
     try {
       setLoadingTemplates(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/v1/extensions/templates', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates || []);
-      }
+      // Use built-in templates for now
+      const builtInTemplates = [
+        {
+          name: '/analyze',
+          description: 'Analyze code for improvements',
+          template: 'Analyze $ARGUMENTS and provide code quality assessment, improvement suggestions, and best practices recommendations.',
+          tags: ['analysis', 'code-review']
+        },
+        {
+          name: '/test',
+          description: 'Generate unit tests',
+          template: 'Generate comprehensive unit tests for $ARGUMENTS with proper test structure, edge cases, and high coverage.',
+          tags: ['testing', 'unit-tests']
+        },
+        {
+          name: '/refactor',
+          description: 'Refactor code',
+          template: 'Refactor $ARGUMENTS to improve code quality, maintainability, and performance. Show before and after code.',
+          tags: ['refactoring', 'clean-code']
+        },
+        {
+          name: '/document',
+          description: 'Generate documentation',
+          template: 'Generate comprehensive documentation for $ARGUMENTS including usage examples, API reference, and implementation details.',
+          tags: ['documentation']
+        },
+        {
+          name: '/debug',
+          description: 'Debug and fix issues',
+          template: 'Debug $ARGUMENTS to identify and fix issues. Provide analysis of the problem and solution with corrected code.',
+          tags: ['debugging', 'bug-fix']
+        }
+      ];
+      setTemplates(builtInTemplates);
     } catch (error) {
-      console.error('Error fetching templates:', error);
+      console.error('Error setting templates:', error);
     } finally {
       setLoadingTemplates(false);
     }
   };
 
   const detectParameters = (template) => {
-    const parameterPattern = /\$([A-Z_]+)/g;
-    const detected = [];
-    let match;
-
-    while ((match = parameterPattern.exec(template)) !== null) {
-      const paramName = match[1];
-      if (!detected.find(p => p.name === paramName)) {
-        detected.push({
-          name: paramName,
-          type: 'string',
-          required: true,
-          description: `Parameter ${paramName}`
-        });
-      }
-    }
-    return detected;
+    // Commands now use $ARGUMENTS instead of individual parameters
+    return template.includes('$ARGUMENTS') ? true : false;
   };
 
   const handleTemplateChange = (template) => {
     setFormData(prev => ({ ...prev, template }));
-    const detectedParams = detectParameters(template);
-    setParameters(detectedParams);
+    // No longer tracking individual parameters
   };
 
   const handleTemplateSelect = (template) => {
@@ -743,7 +698,7 @@ const CommandCreateWizard = ({ onClose, onCreate, projectPath }) => {
       template: template.template,
       tags: template.tags || []
     }));
-    setParameters(template.parameters || detectParameters(template.template));
+    // Commands now use $ARGUMENTS instead of individual parameters
     setStep(2);
   };
 
@@ -755,24 +710,17 @@ const CommandCreateWizard = ({ onClose, onCreate, projectPath }) => {
 
     setCreating(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth-token');
       
       const commandData = {
         name: formData.name,
         description: formData.description,
-        version: formData.version,
-        type: 'command',
+        template: formData.template,
         classification: formData.classification,
-        source: 'local',
-        author: formData.author,
-        config: JSON.stringify({
-          template: formData.template,
-          parameters: parameters,
-          tags: formData.tags
-        })
+        project_path: projectPath
       };
 
-      const response = await fetch('/api/v1/extensions', {
+      const response = await fetch('/api/v1/commands', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1043,6 +991,302 @@ const CommandCreateWizard = ({ onClose, onCreate, projectPath }) => {
             )}
           </div>
         </ScrollArea>
+      </div>
+    </div>
+  );
+};
+
+const SourcesBrowser = ({ onClose, onImport, projectPath }) => {
+  const [sources, setSources] = useState([]);
+  const [selectedSource, setSelectedSource] = useState(null);
+  const [sourceCommands, setSourceCommands] = useState([]);
+  const [selectedCommands, setSelectedCommands] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [importScope, setImportScope] = useState('user');
+
+  useEffect(() => {
+    fetchSources();
+  }, []);
+
+  const fetchSources = async () => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      const response = await fetch('/api/v1/commands/sources', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSources(data.sources || []);
+      }
+    } catch (error) {
+      console.error('Error fetching sources:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSourceCommands = async (sourceId) => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('auth-token');
+      const params = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : '';
+      
+      const response = await fetch(`/api/v1/commands/sources/${sourceId}${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSourceCommands(data.commands || []);
+      }
+    } catch (error) {
+      console.error('Error fetching source commands:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSourceSelect = (source) => {
+    setSelectedSource(source);
+    setSelectedCommands([]);
+    fetchSourceCommands(source.id);
+  };
+
+  const handleCommandToggle = (command) => {
+    setSelectedCommands(prev => {
+      const isSelected = prev.some(cmd => cmd.name === command.name);
+      if (isSelected) {
+        return prev.filter(cmd => cmd.name !== command.name);
+      } else {
+        return [...prev, command];
+      }
+    });
+  };
+
+  const handleImport = async () => {
+    if (selectedCommands.length === 0) {
+      alert('Please select at least one command to import');
+      return;
+    }
+
+    try {
+      setImporting(true);
+      const token = localStorage.getItem('auth-token');
+      
+      const response = await fetch('/api/v1/commands/import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          commandIds: selectedCommands.map(cmd => cmd.name),
+          scope: importScope,
+          project_path: projectPath
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Successfully imported ${data.imported} commands`);
+        if (onImport) onImport();
+      } else {
+        const error = await response.json();
+        alert(`Failed to import commands: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error importing commands:', error);
+      alert('Failed to import commands');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Browse Command Sources
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="flex h-[70vh]">
+          {/* Sources List */}
+          <div className="w-1/3 border-r border-gray-200 dark:border-gray-700">
+            <div className="p-4">
+              <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-4">
+                Available Sources
+              </h3>
+              {loading && !sources.length ? (
+                <p className="text-gray-500 dark:text-gray-400">Loading sources...</p>
+              ) : (
+                <ScrollArea className="h-[60vh]">
+                  <div className="space-y-2">
+                    {sources.map((source) => (
+                      <div
+                        key={source.id}
+                        onClick={() => handleSourceSelect(source)}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedSource?.id === source.id
+                            ? 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
+                            : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        } border`}
+                      >
+                        <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                          {source.name}
+                        </h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {source.description}
+                        </p>
+                        {source.stats && (
+                          <div className="flex gap-3 mt-2 text-xs text-gray-500">
+                            {source.stats.commands && (
+                              <span>{source.stats.commands} commands</span>
+                            )}
+                            {source.stats.agents && (
+                              <span>{source.stats.agents} agents</span>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          by {source.author}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </div>
+
+          {/* Commands List */}
+          <div className="flex-1">
+            {selectedSource ? (
+              <div className="p-4 h-full flex flex-col">
+                <div className="mb-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    Commands from {selectedSource.name}
+                  </h3>
+                  <Input
+                    placeholder="Search commands..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        fetchSourceCommands(selectedSource.id);
+                      }
+                    }}
+                    className="w-full"
+                  />
+                </div>
+
+                {loading ? (
+                  <p className="text-gray-500 dark:text-gray-400">Loading commands...</p>
+                ) : (
+                  <ScrollArea className="flex-1">
+                    <div className="space-y-2">
+                      {sourceCommands.map((command, index) => {
+                        const isSelected = selectedCommands.some(cmd => cmd.name === command.name);
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => handleCommandToggle(command)}
+                            className={`p-3 rounded-lg cursor-pointer transition-colors border ${
+                              isSelected
+                                ? 'bg-blue-50 dark:bg-blue-900/50 border-blue-300 dark:border-blue-700'
+                                : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                                  {command.name}
+                                </h4>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                  {command.description}
+                                </p>
+                                {command.tags && command.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {command.tags.map((tag, i) => (
+                                      <span
+                                        key={i}
+                                        className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="ml-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  className="h-4 w-4 text-blue-600 rounded"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-gray-500 dark:text-gray-400">
+                  Select a source to view available commands
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {selectedCommands.length} command{selectedCommands.length !== 1 ? 's' : ''} selected
+              </span>
+              <select
+                value={importScope}
+                onChange={(e) => setImportScope(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+              >
+                <option value="user">Import to User (Global)</option>
+                <option value="project">Import to Project</option>
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleImport}
+                disabled={selectedCommands.length === 0 || importing}
+              >
+                {importing ? 'Importing...' : `Import ${selectedCommands.length} Command${selectedCommands.length !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

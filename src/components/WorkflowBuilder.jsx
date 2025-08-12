@@ -34,7 +34,7 @@ function WorkflowBuilder({ onSave, onCancel, initialWorkflow = null }) {
     try {
       const response = await fetch('/api/v1/hooks', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         }
       });
 
@@ -151,7 +151,7 @@ function WorkflowBuilder({ onSave, onCancel, initialWorkflow = null }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
         },
         body: JSON.stringify(workflow)
       });

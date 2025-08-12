@@ -74,7 +74,13 @@ router.get('/status', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch
-    const { stdout: branch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
+    let branch = 'main'; // Default fallback
+    try {
+      const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      branch = stdout.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
     
     // Get git status
     const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: projectPath });
@@ -445,8 +451,13 @@ router.get('/remote-status', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch
-    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const branch = currentBranch.trim();
+    let branch = 'main'; // Default fallback
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      branch = currentBranch.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
 
     // Check if there's a remote tracking branch (smart detection)
     let trackingBranch;
@@ -516,8 +527,13 @@ router.post('/fetch', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const branch = currentBranch.trim();
+    let branch = 'main'; // Default fallback
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      branch = currentBranch.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
 
     let remoteName = 'origin'; // fallback
     try {
@@ -557,8 +573,13 @@ router.post('/pull', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const branch = currentBranch.trim();
+    let branch = 'main'; // Default fallback
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      branch = currentBranch.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
 
     let remoteName = 'origin'; // fallback
     let remoteBranch = branch; // fallback
@@ -624,8 +645,13 @@ router.post('/push', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
-    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const branch = currentBranch.trim();
+    let branch = 'main'; // Default fallback
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      branch = currentBranch.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
 
     let remoteName = 'origin'; // fallback
     let remoteBranch = branch; // fallback
@@ -694,8 +720,13 @@ router.post('/publish', async (req, res) => {
     await validateGitRepository(projectPath);
 
     // Get current branch to verify it matches the requested branch
-    const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: projectPath });
-    const currentBranchName = currentBranch.trim();
+    let currentBranchName = 'main'; // Default fallback
+    try {
+      const { stdout: currentBranch } = await execAsync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: projectPath });
+      currentBranchName = currentBranch.trim();
+    } catch (branchError) {
+      console.warn('Could not determine current branch, using default:', branchError.message);
+    }
     
     if (currentBranchName !== branch) {
       return res.status(400).json({ 

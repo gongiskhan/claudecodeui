@@ -45,6 +45,7 @@ import worktreeRoutes from './routes/worktree.js';
 import extensionRoutes from './routes/extensions.js';
 import hookRoutes from './routes/hooks.js';
 import workflowRoutes from './routes/workflows.js';
+import commandRoutes from './routes/commands.js';
 import ExtensionManager from './extensions/manager.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -199,6 +200,7 @@ app.use('/api/worktree', authenticateToken, worktreeRoutes);
 app.use('/api/v1/extensions', authenticateToken, extensionRoutes);
 app.use('/api/v1/hooks', authenticateToken, hookRoutes);
 app.use('/api/v1/workflows', authenticateToken, workflowRoutes);
+app.use('/api/v1/commands', authenticateToken, commandRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
