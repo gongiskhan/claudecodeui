@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
+import { getSession, getSessionsForProject, invalidateCacheForProject } from './sessions.js';
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -373,77 +374,18 @@ async function getProjects() {
 }
 
 async function getSessions(projectName, limit = 5, offset = 0) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
   try {
-    // Check if project directory exists first
-    try {
-      await fs.access(projectDir);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        // Project directory doesn't exist yet (common for new worktrees)
-        return { sessions: [], hasMore: false, total: 0 };
-      }
-      throw error;
-    }
-    
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
-    if (jsonlFiles.length === 0) {
-      return { sessions: [], hasMore: false, total: 0 };
-    }
-    
-    // For performance, get file stats to sort by modification time
-    const filesWithStats = await Promise.all(
-      jsonlFiles.map(async (file) => {
-        const filePath = path.join(projectDir, file);
-        const stats = await fs.stat(filePath);
-        return { file, mtime: stats.mtime };
-      })
-    );
-    
-    // Sort files by modification time (newest first) for better performance
-    filesWithStats.sort((a, b) => b.mtime - a.mtime);
-    
-    const allSessions = new Map();
-    let processedCount = 0;
-    
-    // Process files in order of modification time
-    for (const { file } of filesWithStats) {
-      const jsonlFile = path.join(projectDir, file);
-      const sessions = await parseJsonlSessions(jsonlFile);
-      
-      // Merge sessions, avoiding duplicates by session ID
-      sessions.forEach(session => {
-        if (!allSessions.has(session.id)) {
-          allSessions.set(session.id, session);
-        }
-      });
-      
-      processedCount++;
-      
-      // Early exit optimization: if we have enough sessions and processed recent files
-      if (allSessions.size >= (limit + offset) * 2 && processedCount >= Math.min(3, filesWithStats.length)) {
-        break;
-      }
-    }
-    
-    // Convert to array and sort by last activity
-    const sortedSessions = Array.from(allSessions.values()).sort((a, b) => 
-      new Date(b.lastActivity) - new Date(a.lastActivity)
-    );
-    
-    const total = sortedSessions.length;
-    const paginatedSessions = sortedSessions.slice(offset, offset + limit);
+    const allSessions = await getSessionsForProject(projectName);
+    const total = allSessions.length;
+    const paginatedSessions = allSessions.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
-    
+
     return {
       sessions: paginatedSessions,
       hasMore,
       total,
       offset,
-      limit
+      limit,
     };
   } catch (error) {
     console.error(`Error reading sessions for project ${projectName}:`, error);
@@ -451,118 +393,10 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   }
 }
 
-async function parseJsonlSessions(filePath) {
-  const sessions = new Map();
-  
-  try {
-    const fileStream = fsSync.createReadStream(filePath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity
-    });
-    
-    // console.log(`[JSONL Parser] Reading file: ${filePath}`);
-    let lineCount = 0;
-    
-    for await (const line of rl) {
-      if (line.trim()) {
-        lineCount++;
-        try {
-          const entry = JSON.parse(line);
-          
-          if (entry.sessionId) {
-            if (!sessions.has(entry.sessionId)) {
-              sessions.set(entry.sessionId, {
-                id: entry.sessionId,
-                summary: 'New Session',
-                messageCount: 0,
-                lastActivity: new Date(),
-                cwd: entry.cwd || ''
-              });
-            }
-            
-            const session = sessions.get(entry.sessionId);
-            
-            // Update summary if this is a summary entry
-            if (entry.type === 'summary' && entry.summary) {
-              session.summary = entry.summary;
-            } else if (entry.message?.role === 'user' && entry.message?.content && session.summary === 'New Session') {
-              // Use first user message as summary if no summary entry exists
-              const content = entry.message.content;
-              if (typeof content === 'string' && content.length > 0) {
-                // Skip command messages that start with <command-name>
-                if (!content.startsWith('<command-name>')) {
-                  session.summary = content.length > 50 ? content.substring(0, 50) + '...' : content;
-                }
-              }
-            }
-            
-            // Count messages instead of storing them all
-            session.messageCount = (session.messageCount || 0) + 1;
-            
-            // Update last activity
-            if (entry.timestamp) {
-              session.lastActivity = new Date(entry.timestamp);
-            }
-          }
-        } catch (parseError) {
-          console.warn(`[JSONL Parser] Error parsing line ${lineCount}:`, parseError.message);
-        }
-      }
-    }
-    
-    // console.log(`[JSONL Parser] Processed ${lineCount} lines, found ${sessions.size} sessions`);
-  } catch (error) {
-    console.error('Error reading JSONL file:', error);
-  }
-  
-  // Convert Map to Array and sort by last activity
-  return Array.from(sessions.values()).sort((a, b) => 
-    new Date(b.lastActivity) - new Date(a.lastActivity)
-  );
-}
-
 // Get messages for a specific session
 async function getSessionMessages(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
   try {
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
-    if (jsonlFiles.length === 0) {
-      return [];
-    }
-    
-    const messages = [];
-    
-    // Process all JSONL files to find messages for this session
-    for (const file of jsonlFiles) {
-      const jsonlFile = path.join(projectDir, file);
-      const fileStream = fsSync.createReadStream(jsonlFile);
-      const rl = readline.createInterface({
-        input: fileStream,
-        crlfDelay: Infinity
-      });
-      
-      for await (const line of rl) {
-        if (line.trim()) {
-          try {
-            const entry = JSON.parse(line);
-            if (entry.sessionId === sessionId) {
-              messages.push(entry);
-            }
-          } catch (parseError) {
-            console.warn('Error parsing line:', parseError.message);
-          }
-        }
-      }
-    }
-    
-    // Sort messages by timestamp
-    return messages.sort((a, b) => 
-      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
-    );
+    return await getSession(projectName, sessionId);
   } catch (error) {
     console.error(`Error reading messages for session ${sessionId}:`, error);
     return [];
@@ -628,6 +462,10 @@ async function deleteSession(projectName, sessionId) {
         
         // Write back the filtered content
         await fs.writeFile(jsonlFile, filteredLines.join('\n') + (filteredLines.length > 0 ? '\n' : ''));
+
+        // Invalidate the cache for this project
+        invalidateCacheForProject(projectName);
+
         return true;
       }
     }
@@ -749,7 +587,6 @@ export {
   getProjects,
   getSessions,
   getSessionMessages,
-  parseJsonlSessions,
   renameProject,
   deleteSession,
   isProjectEmpty,

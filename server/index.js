@@ -37,6 +37,7 @@ import fetch from 'node-fetch';
 import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, removeProjectFromBrowser, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { invalidateCacheForProject } from './sessions.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -91,6 +92,14 @@ async function setupProjectsWatcher() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(async () => {
         try {
+          if (filePath.endsWith('.jsonl')) {
+            const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+            const relativePath = path.relative(claudeProjectsPath, filePath);
+            const [projectName] = relativePath.split(path.sep);
+            if (projectName) {
+              invalidateCacheForProject(projectName);
+            }
+          }
           
           // Clear project directory cache when files change
           clearProjectDirectoryCache();
