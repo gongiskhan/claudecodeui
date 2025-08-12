@@ -4,7 +4,7 @@
 # Configuration
 GCP_HOST="100.78.142.56"  # GCP machine IP
 GCP_USER="developer"  # GCP username
-REMOTE_DIR="~/claudecodeui"  # Remote directory on GCP machine
+REMOTE_DIR="~/dev/claudecodeui"  # Remote directory on GCP machine
 LOCAL_DIR="."  # Local project directory
 
 # Colors for output

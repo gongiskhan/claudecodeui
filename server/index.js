@@ -326,7 +326,12 @@ app.get('/api/directories', authenticateToken, async (req, res) => {
     const { path: requestedPath } = req.query;
     
     // Default to user's home directory if no path provided
-    const targetPath = requestedPath ? path.resolve(requestedPath) : process.env.HOME;
+    // Handle ~ expansion
+    let resolvedPath = requestedPath;
+    if (requestedPath && requestedPath.startsWith('~')) {
+      resolvedPath = requestedPath.replace('~', os.homedir());
+    }
+    const targetPath = resolvedPath ? path.resolve(resolvedPath) : os.homedir();
     
     // Security check - ensure path is within reasonable bounds
     if (!targetPath.startsWith('/Users') && !targetPath.startsWith('/home')) {

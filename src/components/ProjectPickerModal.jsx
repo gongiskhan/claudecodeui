@@ -17,8 +17,8 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
   useEffect(() => {
     if (isOpen) {
       if (initialLoad) {
-        // Start one level up from current project directory
-        const projectParent = '/Users/ggomes/dev';
+        // Start with ~/dev which will be resolved by the server
+        const projectParent = '~/dev';
         setCurrentPath(projectParent);
         loadDirectories(projectParent);
         setInitialLoad(false);
@@ -69,7 +69,7 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
   };
 
   const goToHome = () => {
-    navigateToPath('/Users/ggomes/dev');
+    navigateToPath('~/dev');
   };
 
   const selectDirectory = (directory) => {
@@ -154,7 +154,7 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
             <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
           </Button>
           <div className="text-xs text-muted-foreground truncate max-w-xs">
-            {currentPath || '/Users/ggomes/dev'}
+            {currentPath || '~/dev'}
           </div>
           <Button
             variant="outline"
