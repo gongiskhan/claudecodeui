@@ -1,8 +1,12 @@
-// Load environment variables from .env file
+// Load environment variables FIRST before any other imports
+import './config/env.js';
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { findAvailablePort } from '../utils/portFinder.js';
+import { savePortConfig } from '../utils/portConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,6 +48,7 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import worktreeRoutes from './routes/worktree.js';
+import cursorRoutes from './routes/cursor.js';
 import extensionRoutes from './routes/extensions.js';
 import hookRoutes from './routes/hooks.js';
 import workflowRoutes from './routes/workflows.js';
@@ -171,8 +176,36 @@ const wss = new WebSocketServer({
     }
 });
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3009',
+  credentials: true
+}));
 app.use(express.json());
+
+// Session configuration for OAuth
+import session from 'express-session';
+import SQLiteStore from 'connect-sqlite3';
+const SQLiteStoreSession = SQLiteStore(session);
+
+app.use(session({
+  store: new SQLiteStoreSession({
+    db: 'sessions.db',
+    dir: './server/database'
+  }),
+  secret: process.env.SESSION_SECRET || 'default-session-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+import passport from './auth/passport.js';
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
