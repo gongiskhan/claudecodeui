@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
-    "client": "vite --host",
+    "client": "vite --host --port ${VITE_PORT:-5173}",
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server"
@@ -42,6 +42,8 @@
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.3",
     "express": "^4.18.2",
+    "express-session": "^1.18.2",
+    "form-data": "^4.0.4",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.515.0",
@@ -49,6 +51,9 @@
     "multer": "^2.0.2",
     "node-fetch": "^2.7.0",
     "node-pty": "^1.1.0-beta34",
+    "openai": "^5.12.2",
+    "passport": "^0.7.0",
+    "passport-github2": "^0.1.12",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",

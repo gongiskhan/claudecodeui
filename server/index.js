@@ -2,11 +2,8 @@
 import './config/env.js';
 
 import fs from 'fs';
-import path from 'path';
+import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { findAvailablePort } from '../utils/portFinder.js';
-import { savePortConfig } from '../utils/portConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,33 +26,26 @@ try {
 
 console.log('PORT from env:', process.env.PORT);
 
-import express from 'express';
-import { WebSocketServer } from 'ws';
-import http from 'http';
 import cors from 'cors';
+import express from 'express';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
-import os from 'os';
-import pty from 'node-pty';
-import fetch from 'node-fetch';
+import http from 'http';
 import mime from 'mime-types';
+import fetch from 'node-fetch';
+import pty from 'node-pty';
+import os from 'os';
+import { WebSocketServer } from 'ws';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, removeProjectFromBrowser, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { invalidateCacheForProject } from './sessions.js';
-import { spawnClaude, abortClaudeSession } from './claude-cli.js';
-import { spawnCursor, abortCursorSession } from './cursor-cli.js';
-import gitRoutes from './routes/git.js';
-import authRoutes from './routes/auth.js';
-import mcpRoutes from './routes/mcp.js';
-import worktreeRoutes from './routes/worktree.js';
-import cursorRoutes from './routes/cursor.js';
-import extensionRoutes from './routes/extensions.js';
-import hookRoutes from './routes/hooks.js';
-import workflowRoutes from './routes/workflows.js';
-import commandRoutes from './routes/commands.js';
-import ExtensionManager from './extensions/manager.js';
+import { abortClaudeSession, spawnClaude } from './claude-cli.js';
+import { abortCursorSession, spawnCursor } from './cursor-cli.js';
 import { initializeDatabase } from './database/db.js';
-import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import ExtensionManager from './extensions/manager.js';
+import { authenticateToken, authenticateWebSocket, validateApiKey } from './middleware/auth.js';
+import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSession, extractProjectDirectory, getProjects, getSessionMessages, getSessions, renameProject } from './projects.js';
+import authRoutes from './routes/auth.js';
+import cursorRoutes from './routes/cursor.js';
+import gitRoutes from './routes/git.js';
+import mcpRoutes from './routes/mcp.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -183,8 +173,8 @@ app.use(cors({
 app.use(express.json());
 
 // Session configuration for OAuth
-import session from 'express-session';
 import SQLiteStore from 'connect-sqlite3';
+import session from 'express-session';
 const SQLiteStoreSession = SQLiteStore(session);
 
 app.use(session({
@@ -1014,7 +1004,7 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
     // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+    res.redirect(`http://localhost:${process.env.VITE_PORT || 5173}`);
   }
 });
 
