@@ -479,6 +479,65 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     }
 });
 
+// List directories for file picker
+app.get('/api/directories', authenticateToken, async (req, res) => {
+    try {
+        const { path: requestedPath } = req.query;
+        
+        // Default to user's home directory if no path provided
+        // Handle ~ expansion
+        let resolvedPath = requestedPath;
+        if (requestedPath && requestedPath.startsWith('~')) {
+            resolvedPath = requestedPath.replace('~', os.homedir());
+        }
+        const targetPath = resolvedPath ? path.resolve(resolvedPath) : os.homedir();
+        
+        // Security check - ensure path is within reasonable bounds
+        if (!targetPath.startsWith('/Users') && !targetPath.startsWith('/home') && !targetPath.startsWith('C:\\Users')) {
+            return res.status(403).json({ error: 'Access denied to this directory' });
+        }
+        
+        try {
+            const entries = await fsPromises.readdir(targetPath, { withFileTypes: true });
+            
+            const directories = entries
+                .filter(entry => entry.isDirectory())
+                .filter(entry => !entry.name.startsWith('.') || entry.name === '.claude') // Hide hidden dirs except .claude
+                .map(entry => ({
+                    name: entry.name,
+                    path: path.join(targetPath, entry.name),
+                    isDirectory: true
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Add parent directory option if not at root
+            const parentPath = path.dirname(targetPath);
+            const canGoUp = parentPath !== targetPath && 
+                           (parentPath.startsWith('/Users') || 
+                            parentPath.startsWith('/home') || 
+                            parentPath.startsWith('C:\\Users'));
+            
+            res.json({
+                currentPath: targetPath,
+                parentPath: canGoUp ? parentPath : null,
+                directories
+            });
+            
+        } catch (error) {
+            if (error.code === 'EACCES') {
+                res.status(403).json({ error: 'Permission denied' });
+            } else if (error.code === 'ENOENT') {
+                res.status(404).json({ error: 'Directory not found' });
+            } else {
+                throw error;
+            }
+        }
+    } catch (error) {
+        console.error('Error listing directories:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
     const url = request.url;
