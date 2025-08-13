@@ -12,7 +12,7 @@ export default defineConfig({
   workers: 1, // Single worker to avoid conflicts with database/file operations
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3001',
+    baseURL: 'http://localhost:4567',
     trace: 'on-first-retry',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -25,13 +25,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm run server',
-      port: 3000,
+      command: 'PORT=3456 npm run server',
+      port: 3456,
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'npm run client',
-      port: 3001,
+      command: 'VITE_PORT=4567 npm run client',
+      port: 4567,
       reuseExistingServer: !process.env.CI,
     }
   ],

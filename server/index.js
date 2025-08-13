@@ -201,6 +201,20 @@ app.use(passport.session());
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
+app.get('/api/version', async (req, res) => {
+    try {
+        const packageJsonPath = path.join(__dirname, '../package.json');
+        const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, 'utf8'));
+        res.json({ version: packageJson.version });
+    } catch (error) {
+        res.status(500).json({ error: 'Could not read version from package.json' });
+    }
+});
+
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 

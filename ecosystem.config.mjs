@@ -2,11 +2,11 @@ export default {
   apps: [{
     name: 'claudecodeui',
     script: 'npm',
-    args: 'run dev',
+    args: 'run start',
     env: {
       PORT: '3456',
       VITE_PORT: '4567',
-      NODE_ENV: 'development'
+      NODE_ENV: 'production'
     },
     watch: false,
     max_memory_restart: '1G',
