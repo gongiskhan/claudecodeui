@@ -437,14 +437,9 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                 type: 'init',
                 projectPath: selectedProject.fullPath || selectedProject.path,
                 sessionId: selectedSession?.id,
-<<<<<<< HEAD
                 hasSession: !!selectedSession && shellMode === 'claude',
                 mode: shellMode,
                 command: shellMode === 'general' ? customCommand : undefined,
-=======
-                hasSession: !!selectedSession,
-                provider: selectedSession?.__provider || 'claude',
->>>>>>> upstream/main
                 cols: terminal.current.cols,
                 rows: terminal.current.rows
               };
@@ -657,7 +652,6 @@ function Shell({ selectedProject, selectedSession, isActive }) {
               </button>
               
               <p className="text-gray-400 text-sm mt-3 px-2">
-<<<<<<< HEAD
                 {shellMode === 'claude' ? (
                   selectedSession ? 
                     `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
@@ -667,17 +661,6 @@ function Shell({ selectedProject, selectedSession, isActive }) {
                     `Execute: ${customCommand}` :
                     'Interactive bash shell'
                 )}
-=======
-                {selectedSession ? 
-                  (() => {
-                    const displaySessionName = selectedSession.__provider === 'cursor'
-                      ? (selectedSession.name || 'Untitled Session')
-                      : (selectedSession.summary || 'New Session');
-                    return `Resume session: ${displaySessionName.slice(0, 50)}...`;
-                  })() : 
-                  'Start a new Claude session'
-                }
->>>>>>> upstream/main
               </p>
             </div>
           </div>

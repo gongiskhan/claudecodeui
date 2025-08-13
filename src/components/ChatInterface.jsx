@@ -2800,7 +2800,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
     const toolsSettings = getToolsSettings();
 
-<<<<<<< HEAD
     // Send command to Claude CLI via WebSocket with images
     sendMessage({
       type: 'claude-command',
@@ -2816,42 +2815,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         images: uploadedImages // Pass images to backend
       }
     });
-=======
-    // Send command based on provider
-    if (provider === 'cursor') {
-      // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
-      sendMessage({
-        type: 'cursor-command',
-        command: input,
-        sessionId: effectiveSessionId,
-        options: {
-          // Prefer fullPath (actual cwd for project), fallback to path
-          cwd: selectedProject.fullPath || selectedProject.path,
-          projectPath: selectedProject.fullPath || selectedProject.path,
-          sessionId: effectiveSessionId,
-          resume: !!effectiveSessionId,
-          model: cursorModel,
-          skipPermissions: toolsSettings?.skipPermissions || false,
-          toolsSettings: toolsSettings
-        }
-      });
-    } else {
-      // Send Claude command (existing code)
-      sendMessage({
-        type: 'claude-command',
-        command: input,
-        options: {
-          projectPath: selectedProject.path,
-          cwd: selectedProject.fullPath,
-          sessionId: currentSessionId,
-          resume: !!currentSessionId,
-          toolsSettings: toolsSettings,
-          permissionMode: permissionMode,
-          images: uploadedImages // Pass images to backend
-        }
-      });
-    }
->>>>>>> upstream/main
 
     setInput('');
     setAttachedImages([]);
@@ -3255,7 +3218,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 ${
         isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
       }`}>
-<<<<<<< HEAD
         {/* Claude Working Status - positioned above the input form */}
         <ClaudeStatus 
           status={claudeStatus}
@@ -3263,17 +3225,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           onAbort={handleAbortSession}
         />
         
-=======
-    
-        <div className="flex-1">
-              <ClaudeStatus 
-                status={claudeStatus}
-                isLoading={isLoading}
-                onAbort={handleAbortSession}
-                provider={provider}
-              />
-              </div>
->>>>>>> upstream/main
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
         <div className="max-w-4xl mx-auto mb-3">
           <div className="flex items-center justify-center gap-3">

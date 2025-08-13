@@ -58,6 +58,70 @@ const connectedClients = new Set();
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
+<<<<<<< HEAD
+  const chokidar = (await import('chokidar')).default;
+  const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+  
+  if (projectsWatcher) {
+    projectsWatcher.close();
+  }
+  
+  try {
+    // Initialize chokidar watcher with optimized settings
+    projectsWatcher = chokidar.watch(claudeProjectsPath, {
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/*.tmp',
+        '**/*.swp',
+        '**/.DS_Store'
+      ],
+      persistent: true,
+      ignoreInitial: true, // Don't fire events for existing files on startup
+      followSymlinks: false,
+      depth: 10, // Reasonable depth limit
+      awaitWriteFinish: {
+        stabilityThreshold: 100, // Wait 100ms for file to stabilize
+        pollInterval: 50
+      }
+    });
+    
+    // Debounce function to prevent excessive notifications
+    let debounceTimer;
+    const debouncedUpdate = async (eventType, filePath) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        try {
+          if (filePath.endsWith('.jsonl')) {
+            const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
+            const relativePath = path.relative(claudeProjectsPath, filePath);
+            const [projectName] = relativePath.split(path.sep);
+            if (projectName) {
+              invalidateCacheForProject(projectName);
+            }
+          }
+          
+          // Clear project directory cache when files change
+          clearProjectDirectoryCache();
+          
+          // Get updated projects list
+          const updatedProjects = await getProjects();
+          
+          // Notify all connected clients about the project changes
+          const updateMessage = JSON.stringify({
+            type: 'projects_updated',
+            projects: updatedProjects,
+            timestamp: new Date().toISOString(),
+            changeType: eventType,
+            changedFile: path.relative(claudeProjectsPath, filePath)
+          });
+          
+          connectedClients.forEach(client => {
+            if (client.readyState === client.OPEN) {
+              client.send(updateMessage);
+=======
     const chokidar = (await import('chokidar')).default;
     const claudeProjectsPath = path.join(process.env.HOME, '.claude', 'projects');
 
@@ -84,6 +148,7 @@ async function setupProjectsWatcher() {
             awaitWriteFinish: {
                 stabilityThreshold: 100, // Wait 100ms for file to stabilize
                 pollInterval: 50
+>>>>>>> upstream/main
             }
         });
 
@@ -147,6 +212,39 @@ const server = http.createServer(app);
 const wsLogLimiter = new Map();
 
 // Single WebSocket server that handles both paths
+<<<<<<< HEAD
+const wss = new WebSocketServer({ 
+  server,
+  verifyClient: (info) => {
+    const url = new URL(info.req.url, 'http://localhost');
+    const pathname = url.pathname;
+    
+    // Rate limit logging - only log once per path per 30 seconds
+    const now = Date.now();
+    const lastLog = wsLogLimiter.get(pathname) || 0;
+    const shouldLog = now - lastLog > 30000; // 30 seconds
+    
+    if (shouldLog) {
+      console.log('🔗 WebSocket connection to:', pathname);
+      wsLogLimiter.set(pathname, now);
+    }
+    
+    // Extract token from query parameters or headers
+    const token = url.searchParams.get('token') || 
+                  info.req.headers.authorization?.split(' ')[1];
+    
+    // Verify token
+    const user = authenticateWebSocket(token);
+    if (!user) {
+      if (shouldLog) console.log('❌ WebSocket authentication failed');
+      return false;
+    }
+    
+    // Store user info in the request for later use
+    info.req.user = user;
+    return true;
+  }
+=======
 const wss = new WebSocketServer({
     server,
     verifyClient: (info) => {
@@ -169,6 +267,7 @@ const wss = new WebSocketServer({
         console.log('✅ WebSocket authenticated for user:', user.username);
         return true;
     }
+>>>>>>> upstream/main
 });
 
 app.use(cors());
@@ -186,8 +285,19 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
+<<<<<<< HEAD
+// Worktree API Routes (protected)
+app.use('/api/worktree', authenticateToken, worktreeRoutes);
+
+// Extension API Routes (protected)
+app.use('/api/v1/extensions', authenticateToken, extensionRoutes);
+app.use('/api/v1/hooks', authenticateToken, hookRoutes);
+app.use('/api/v1/workflows', authenticateToken, workflowRoutes);
+app.use('/api/v1/commands', authenticateToken, commandRoutes);
+=======
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
+>>>>>>> upstream/main
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -197,6 +307,24 @@ const configLogLimiter = { lastLog: 0, count: 0 };
 
 // API Routes (protected)
 app.get('/api/config', authenticateToken, (req, res) => {
+<<<<<<< HEAD
+  const host = req.headers.host || `${req.hostname}:${PORT}`;
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
+  
+  // Only log config API calls once per minute or every 50 calls
+  const now = Date.now();
+  configLogLimiter.count++;
+  if (now - configLogLimiter.lastLog > 60000 || configLogLimiter.count >= 50) {
+    console.log(`📡 Config API (${configLogLimiter.count} calls) - Host: ${host}`);
+    configLogLimiter.lastLog = now;
+    configLogLimiter.count = 0;
+  }
+  
+  res.json({
+    serverPort: PORT,
+    wsUrl: `${protocol}://${host}`
+  });
+=======
     const host = req.headers.host || `${req.hostname}:${PORT}`;
     const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
 
@@ -206,6 +334,7 @@ app.get('/api/config', authenticateToken, (req, res) => {
         serverPort: PORT,
         wsUrl: `${protocol}://${host}`
     });
+>>>>>>> upstream/main
 });
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
@@ -300,10 +429,99 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
         console.error('Error creating project:', error);
         res.status(500).json({ error: error.message });
     }
+<<<<<<< HEAD
+    
+    const project = await addProjectManually(projectPath.trim());
+    res.json({ success: true, project });
+  } catch (error) {
+    console.error('Error adding project:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove project from browser only (not physical folder)
+app.delete('/api/projects/:projectName/remove', authenticateToken, async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    await removeProjectFromBrowser(projectName);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing project from browser:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List directories for file picker
+app.get('/api/directories', authenticateToken, async (req, res) => {
+  try {
+    const { path: requestedPath } = req.query;
+    
+    // Default to user's home directory if no path provided
+    // Handle ~ expansion
+    let resolvedPath = requestedPath;
+    if (requestedPath && requestedPath.startsWith('~')) {
+      resolvedPath = requestedPath.replace('~', os.homedir());
+    }
+    const targetPath = resolvedPath ? path.resolve(resolvedPath) : os.homedir();
+    
+    // Security check - ensure path is within reasonable bounds
+    if (!targetPath.startsWith('/Users') && !targetPath.startsWith('/home')) {
+      return res.status(403).json({ error: 'Access denied to this directory' });
+    }
+    
+    try {
+      const entries = await fsPromises.readdir(targetPath, { withFileTypes: true });
+      
+      const directories = entries
+        .filter(entry => entry.isDirectory())
+        .filter(entry => !entry.name.startsWith('.') || entry.name === '.claude') // Hide hidden dirs except .claude
+        .map(entry => ({
+          name: entry.name,
+          path: path.join(targetPath, entry.name),
+          isDirectory: true
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Add parent directory option if not at root
+      const parentPath = path.dirname(targetPath);
+      const canGoUp = parentPath !== targetPath && (parentPath.startsWith('/Users') || parentPath.startsWith('/home'));
+      
+      res.json({
+        currentPath: targetPath,
+        parentPath: canGoUp ? parentPath : null,
+        directories
+      });
+      
+    } catch (error) {
+      if (error.code === 'EACCES') {
+        res.status(403).json({ error: 'Permission denied' });
+      } else if (error.code === 'ENOENT') {
+        res.status(404).json({ error: 'Directory not found' });
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error listing directories:', error);
+    res.status(500).json({ error: error.message });
+  }
+=======
+>>>>>>> upstream/main
 });
 
 // Read file content endpoint
 app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+<<<<<<< HEAD
+  try {
+    const { projectName } = req.params;
+    const { filePath } = req.query;
+    
+    // Using fsPromises from import
+    
+    // Security check - ensure the path is safe and absolute
+    if (!filePath || !path.isAbsolute(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+=======
     try {
         const { projectName } = req.params;
         const { filePath } = req.query;
@@ -328,11 +546,28 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
         } else {
             res.status(500).json({ error: error.message });
         }
+>>>>>>> upstream/main
     }
 });
 
 // Serve binary file content endpoint (for images, etc.)
 app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
+<<<<<<< HEAD
+  try {
+    const { projectName } = req.params;
+    const { path: filePath } = req.query;
+    
+    // Using fs from import
+    // Using mime from import
+    
+    // Security check - ensure the path is safe and absolute
+    if (!filePath || !path.isAbsolute(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+    
+    // Check if file exists
+=======
+>>>>>>> upstream/main
     try {
         const { projectName } = req.params;
         const { path: filePath } = req.query;
@@ -379,6 +614,25 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 
 // Save file content endpoint
 app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+<<<<<<< HEAD
+  try {
+    const { projectName } = req.params;
+    const { filePath, content } = req.body;
+    
+    // Using fsPromises from import
+    
+    // Security check - ensure the path is safe and absolute
+    if (!filePath || !path.isAbsolute(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+    
+    if (content === undefined) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+    
+    // Create backup of original file
+=======
+>>>>>>> upstream/main
     try {
         const { projectName } = req.params;
         const { filePath, content } = req.body;
@@ -458,6 +712,31 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
 
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
+<<<<<<< HEAD
+  const url = request.url;
+  
+  // Parse URL to get pathname without query parameters
+  const urlObj = new URL(url, 'http://localhost');
+  const pathname = urlObj.pathname;
+  
+  if (pathname === '/shell') {
+    handleShellConnection(ws);
+  } else if (pathname === '/ws') {
+    handleChatConnection(ws);
+  } else if (pathname === '/ws-worktree') {
+    // Legacy worktree WebSocket endpoint - silently close without logging
+    ws.close();
+  } else {
+    // Only log unknown paths once per minute
+    const now = Date.now();
+    const lastUnknownLog = wsLogLimiter.get('unknown-' + pathname) || 0;
+    if (now - lastUnknownLog > 60000) {
+      console.log('❌ Unknown WebSocket path:', pathname);
+      wsLogLimiter.set('unknown-' + pathname, now);
+    }
+    ws.close();
+  }
+=======
     const url = request.url;
     console.log('🔗 Client connected to:', url);
 
@@ -473,10 +752,51 @@ wss.on('connection', (ws, request) => {
         console.log('❌ Unknown WebSocket path:', pathname);
         ws.close();
     }
+>>>>>>> upstream/main
 });
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws) {
+<<<<<<< HEAD
+  // Add to connected clients for project updates
+  connectedClients.add(ws);
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      if (data.type === 'claude-command') {
+        console.log('💬 Claude command received');
+        // Don't await - let Claude processes run in parallel for different sessions
+        spawnClaude(data.command, data.options, ws).catch(error => {
+          console.error('❌ Claude spawn error:', error.message);
+          ws.send(JSON.stringify({
+            type: 'claude-error',
+            error: error.message
+          }));
+        });
+      } else if (data.type === 'abort-session') {
+        const success = abortClaudeSession(data.sessionId);
+        ws.send(JSON.stringify({
+          type: 'session-aborted',
+          sessionId: data.sessionId,
+          success
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Chat WebSocket error:', error.message);
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: error.message
+      }));
+    }
+  });
+  
+  ws.on('close', () => {
+    // Remove from connected clients
+    connectedClients.delete(ws);
+  });
+=======
     console.log('💬 Chat WebSocket connected');
 
     // Add to connected clients for project updates
@@ -541,10 +861,149 @@ function handleChatConnection(ws) {
         // Remove from connected clients
         connectedClients.delete(ws);
     });
+>>>>>>> upstream/main
 }
 
 // Handle shell WebSocket connections
 function handleShellConnection(ws) {
+<<<<<<< HEAD
+  let shellProcess = null;
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      if (data.type === 'init') {
+        // Initialize shell with project path and optional session info
+        const projectPath = data.projectPath || process.cwd();
+        const sessionId = data.sessionId;
+        const hasSession = data.hasSession;
+        const mode = data.mode || 'claude'; // 'claude' or 'general'
+        const customCommand = data.command; // For general mode
+        
+        console.log('🚀 Shell init:', mode === 'claude' ? (hasSession ? 'Resume Claude' : 'New Claude') : `General shell`);
+        
+        // First send a welcome message based on mode
+        let welcomeMsg;
+        let shellCommand;
+        
+        if (mode === 'claude') {
+          welcomeMsg = hasSession ? 
+            `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+            `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+          
+          // Build Claude command
+          let claudeCommand = 'claude';
+          if (hasSession && sessionId) {
+            claudeCommand = `claude --resume ${sessionId} || claude`;
+          }
+          shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
+        } else {
+          // General shell mode
+          welcomeMsg = customCommand ? 
+            `\x1b[36mExecuting: ${customCommand} in ${projectPath}\x1b[0m\r\n` :
+            `\x1b[36mGeneral shell in: ${projectPath}\x1b[0m\r\n`;
+          
+          if (customCommand) {
+            shellCommand = `cd "${projectPath}" && ${customCommand}`;
+          } else {
+            // Start an interactive bash shell in the project directory
+            shellCommand = 'bash';
+          }
+        }
+        
+        ws.send(JSON.stringify({
+          type: 'output',
+          data: welcomeMsg
+        }));
+        
+        try {
+          // Configure PTY spawn based on mode
+          let spawnArgs, spawnOptions;
+          
+          // Create enhanced environment with proper PATH for npm and node
+          const enhancedEnv = {
+            ...process.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+            FORCE_COLOR: '3',
+            BROWSER: 'echo "OPEN_URL:"',
+            // Ensure PATH includes common node/npm locations
+            PATH: [
+              `${projectPath}/node_modules/.bin`, // Project-specific binaries
+              process.env.PATH,
+              '/usr/local/bin', // Common npm global install location
+              '/opt/homebrew/bin', // Homebrew on Apple Silicon
+              '/usr/bin',
+              '/bin'
+            ].filter(Boolean).join(':')
+          };
+          
+          if (mode === 'general' && !customCommand) {
+            // For interactive bash shell, use login shell to load full environment
+            spawnOptions = {
+              name: 'xterm-256color',
+              cols: data.cols || 80,
+              rows: data.rows || 24,
+              cwd: projectPath, // Start directly in project directory
+              env: {
+                ...enhancedEnv,
+                PS1: '\\[\\e[1;32m\\]\\u@\\h\\[\\e[0m\\]:\\[\\e[1;34m\\]\\w\\[\\e[0m\\]$ ', // Nice colored prompt
+              }
+            };
+            // Use login shell to ensure proper environment loading
+            shellProcess = pty.spawn('bash', ['-l'], spawnOptions);
+          } else {
+            // For Claude mode or general mode with custom command
+            spawnOptions = {
+              name: 'xterm-256color',
+              cols: data.cols || 80,
+              rows: data.rows || 24,
+              cwd: projectPath, // Use project path as cwd for all commands
+              env: enhancedEnv
+            };
+            
+            // Use login shell for better environment loading
+            const wrappedCommand = `source ~/.bash_profile 2>/dev/null || source ~/.bashrc 2>/dev/null || true; ${shellCommand}`;
+            shellProcess = pty.spawn('bash', ['-l', '-c', wrappedCommand], spawnOptions);
+          }
+          
+          // Handle data output
+          shellProcess.onData((data) => {
+            if (ws.readyState === ws.OPEN) {
+              let outputData = data;
+              
+              // Check for various URL opening patterns
+              const patterns = [
+                // Direct browser opening commands
+                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
+                // BROWSER environment variable override
+                /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
+                // Git and other tools opening URLs
+                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
+                // General URL patterns that might be opened
+                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
+                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
+                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
+              ];
+              
+              patterns.forEach(pattern => {
+                let match;
+                while ((match = pattern.exec(data)) !== null) {
+                  const url = match[1];
+                  console.log('🔗 Detected URL for opening:', url);
+                  
+                  // Send URL opening message to client
+                  ws.send(JSON.stringify({
+                    type: 'url_open',
+                    url: url
+                  }));
+                  
+                  // Replace the OPEN_URL pattern with a user-friendly message
+                  if (pattern.source.includes('OPEN_URL')) {
+                    outputData = outputData.replace(match[0], `🌐 Opening in browser: ${url}`);
+                  }
+=======
     console.log('🐚 Shell client connected');
     let shellProcess = null;
 
@@ -716,10 +1175,18 @@ function handleShellConnection(ws) {
                 if (shellProcess && shellProcess.resize) {
                     console.log('Terminal resize requested:', data.cols, 'x', data.rows);
                     shellProcess.resize(data.cols, data.rows);
+>>>>>>> upstream/main
                 }
             }
+<<<<<<< HEAD
+          });
+          
+          // Handle process exit
+          shellProcess.onExit((exitCode) => {
+=======
         } catch (error) {
             console.error('❌ Shell WebSocket error:', error.message);
+>>>>>>> upstream/main
             if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'output',
@@ -727,6 +1194,44 @@ function handleShellConnection(ws) {
                 }));
             }
         }
+<<<<<<< HEAD
+        
+      } else if (data.type === 'input') {
+        // Send input to shell process
+        if (shellProcess && shellProcess.write) {
+          try {
+            shellProcess.write(data.data);
+          } catch (error) {
+            console.error('Error writing to shell:', error);
+          }
+        }
+      } else if (data.type === 'resize') {
+        // Handle terminal resize
+        if (shellProcess && shellProcess.resize) {
+          shellProcess.resize(data.cols, data.rows);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Shell WebSocket error:', error.message);
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'output',
+          data: `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`
+        }));
+      }
+    }
+  });
+  
+  ws.on('close', () => {
+    if (shellProcess && shellProcess.kill) {
+      shellProcess.kill();
+    }
+  });
+  
+  ws.on('error', (error) => {
+    console.error('❌ Shell WebSocket error:', error);
+  });
+=======
     });
 
     ws.on('close', () => {
@@ -740,6 +1245,7 @@ function handleShellConnection(ws) {
     ws.on('error', (error) => {
         console.error('❌ Shell WebSocket error:', error);
     });
+>>>>>>> upstream/main
 }
 // Audio transcription endpoint
 app.post('/api/transcribe', authenticateToken, async (req, res) => {
@@ -1095,6 +1601,26 @@ async function initializeExtensionSystem() {
 
 // Initialize database and start server
 async function startServer() {
+<<<<<<< HEAD
+  try {
+    // Initialize authentication database
+    await initializeDatabase();
+    console.log('✅ Database initialization skipped (testing)');
+    
+    // Initialize extension system
+    const extensionManager = await initializeExtensionSystem();
+    
+    server.listen(PORT, '0.0.0.0', async () => {
+      console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
+      
+      // Start watching the projects folder for changes
+      await setupProjectsWatcher(); // Re-enabled with better-sqlite3
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+=======
     try {
         // Initialize authentication database
         await initializeDatabase();
@@ -1110,6 +1636,7 @@ async function startServer() {
         console.error('❌ Failed to start server:', error);
         process.exit(1);
     }
+>>>>>>> upstream/main
 }
 
 startServer();
