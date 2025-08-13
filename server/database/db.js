@@ -71,7 +71,7 @@ const userDb = {
   // Get user by ID
   getUserById: (userId) => {
     try {
-      const row = db.prepare('SELECT id, username, created_at, last_login, auth_provider, github_username, email, avatar_url FROM users WHERE id = ? AND is_active = 1').get(userId);
+      const row = db.prepare('SELECT id, username, created_at, last_login, auth_provider, github_username, github_access_token, email, avatar_url FROM users WHERE id = ? AND is_active = 1').get(userId);
       return row;
     } catch (err) {
       throw err;
@@ -92,13 +92,14 @@ const userDb = {
   createGithubUser: (userData) => {
     try {
       const stmt = db.prepare(
-        'INSERT INTO users (username, auth_provider, github_id, github_username, email, avatar_url) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO users (username, auth_provider, github_id, github_username, github_access_token, email, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)'
       );
       const result = stmt.run(
         userData.username,
         'github',
         userData.github_id,
         userData.github_username,
+        userData.github_access_token,
         userData.email,
         userData.avatar_url
       );
@@ -106,7 +107,8 @@ const userDb = {
         id: result.lastInsertRowid, 
         username: userData.username,
         auth_provider: 'github',
-        github_username: userData.github_username 
+        github_username: userData.github_username,
+        github_access_token: userData.github_access_token
       };
     } catch (err) {
       throw err;
@@ -117,6 +119,15 @@ const userDb = {
   updateUserLastLogin: (userId) => {
     try {
       db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Update GitHub access token
+  updateGithubAccessToken: (userId, accessToken) => {
+    try {
+      db.prepare('UPDATE users SET github_access_token = ? WHERE id = ?').run(accessToken, userId);
     } catch (err) {
       throw err;
     }

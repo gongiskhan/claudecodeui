@@ -537,17 +537,21 @@ async function removeProjectFromBrowser(projectName) {
 
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
+  console.log('📂 addProjectManually called with:', projectPath);
   const absolutePath = path.resolve(projectPath);
+  console.log('📂 Resolved to absolute path:', absolutePath);
   
   try {
     // Check if the path exists
     await fs.access(absolutePath);
   } catch (error) {
+    console.error('📂 Path check failed for:', absolutePath);
     throw new Error(`Path does not exist: ${absolutePath}`);
   }
   
   // Generate project name (encode path for use as directory name)
   const projectName = absolutePath.replace(/\//g, '-');
+  console.log('📂 Generated project name:', projectName);
   
   // Check if project already exists in config
   const config = await loadProjectConfig();

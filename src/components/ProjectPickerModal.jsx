@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Folder, ArrowUp, X, FolderPlus, Home, RefreshCw } from 'lucide-react';
+import { Folder, ArrowUp, X, FolderPlus, Home, RefreshCw, Github } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../utils/api';
+import GitHubRepoSelector from './GitHubRepoSelector';
 
 function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
   const [currentPath, setCurrentPath] = useState('');
@@ -12,20 +13,14 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
   const [error, setError] = useState(null);
   const [selectedPath, setSelectedPath] = useState('');
   const [initialLoad, setInitialLoad] = useState(true);
+  const [manualPath, setManualPath] = useState('');
+  const [showGitHubSelector, setShowGitHubSelector] = useState(false);
+  const [isGitHubAuthenticated, setIsGitHubAuthenticated] = useState(false);
 
   // Detect OS and get appropriate home directory path
   const getDefaultPath = () => {
-    const platform = navigator.platform.toLowerCase();
-    const userAgent = navigator.userAgent.toLowerCase();
-    
-    if (platform.includes('win') || userAgent.includes('windows')) {
-      return 'C:\\Users';
-    } else if (platform.includes('mac') || userAgent.includes('mac')) {
-      return '/Users';
-    } else {
-      // Linux and other Unix-like systems
-      return '/home';
-    }
+    // Use tilde expansion which will be resolved by the server to the actual home directory
+    return '~';
   };
 
   // Load directories when modal opens or path changes
@@ -42,6 +37,9 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
         setCurrentPath(projectParent);
         loadDirectories(projectParent);
         setInitialLoad(false);
+        
+        // Check GitHub authentication status
+        checkGitHubAuth();
       }
     }
   }, [isOpen]);
@@ -52,6 +50,18 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
       loadDirectories(currentPath);
     }
   }, [currentPath]);
+
+  const checkGitHubAuth = async () => {
+    try {
+      const response = await api.fetchWithAuth('/api/auth/github/status');
+      if (response.ok) {
+        const data = await response.json();
+        setIsGitHubAuthenticated(data.isGitHubAuthenticated);
+      }
+    } catch (error) {
+      console.error('Error checking GitHub auth:', error);
+    }
+  };
 
   const loadDirectories = async (path = null) => {
     setLoading(true);
@@ -116,10 +126,31 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
     setSelectedPath('');
     setError(null);
     setInitialLoad(true);
+    setShowGitHubSelector(false);
     onClose();
   };
 
+  const handleGitHubRepoSelect = (repoPath) => {
+    // The repository has been cloned, now add it as a project
+    onSelectProject(repoPath);
+    handleClose();
+  };
+
   if (!isOpen) return null;
+
+  // Show GitHub repository selector if selected
+  if (showGitHubSelector) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-card rounded-lg border border-border w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl">
+          <GitHubRepoSelector 
+            onSelectRepo={handleGitHubRepoSelect}
+            onBack={() => setShowGitHubSelector(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -146,58 +177,102 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
         </div>
 
         {/* Navigation Bar */}
-        <div className="flex items-center gap-2 p-3 border-b border-border bg-muted/30">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToHome}
-            disabled={loading}
-            className="h-8 px-3"
-          >
-            <Home className="w-3 h-3 mr-2" />
-            Home
-          </Button>
-          {parentPath && (
+        <div className="flex flex-col gap-2 p-3 border-b border-border bg-muted/30">
+          {/* GitHub Clone Option */}
+          {isGitHubAuthenticated && (
+            <div className="flex items-center gap-2 mb-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGitHubSelector(true)}
+                className="h-8 px-3 w-full"
+              >
+                <Github className="w-3 h-3 mr-2" />
+                Clone from GitHub
+              </Button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={goToParent}
+              onClick={goToHome}
               disabled={loading}
               className="h-8 px-3"
             >
-              <ArrowUp className="w-3 h-3 mr-2" />
-              Up
+              <Home className="w-3 h-3 mr-2" />
+              Home
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => loadDirectories(currentPath)}
-            disabled={loading}
-            className="h-8 px-3 ml-auto"
-          >
-            <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
-          </Button>
-          <div className="text-xs text-muted-foreground truncate max-w-xs">
-
-          //  {currentPath || '~/dev'}
-
-            {currentPath || getDefaultPath()}
-
+            {parentPath && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goToParent}
+                disabled={loading}
+                className="h-8 px-3"
+              >
+                <ArrowUp className="w-3 h-3 mr-2" />
+                Up
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => loadDirectories(currentPath)}
+              disabled={loading}
+              className="h-8 px-3 ml-auto"
+            >
+              <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+            </Button>
+            <div className="text-xs text-muted-foreground truncate max-w-xs">
+              {currentPath || getDefaultPath()}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (currentPath) {
+                  setSelectedPath(currentPath);
+                }
+              }}
+              className="h-8 px-3 ml-2"
+            >
+              <FolderPlus className="w-3 h-3 mr-2" />
+              Select This Folder
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (currentPath) {
-                setSelectedPath(currentPath);
-              }
-            }}
-            className="h-8 px-3 ml-2"
-          >
-            <FolderPlus className="w-3 h-3 mr-2" />
-            Select This Folder
-          </Button>
+          
+          {/* Manual Path Entry */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={manualPath}
+              onChange={(e) => setManualPath(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && manualPath.trim()) {
+                  navigateToPath(manualPath.trim());
+                  setManualPath('');
+                }
+              }}
+              placeholder="Enter path (e.g., ~/dev or /Users/username)"
+              className="flex-1 h-8 px-3 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground placeholder-muted-foreground"
+              disabled={loading}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (manualPath.trim()) {
+                  navigateToPath(manualPath.trim());
+                  setManualPath('');
+                }
+              }}
+              disabled={!manualPath.trim() || loading}
+              className="h-8 px-3"
+            >
+              Go
+            </Button>
+          </div>
         </div>
 
         {/* Directory List */}
@@ -231,7 +306,8 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
                           "flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer hover:bg-accent/50",
                           selectedPath === directory.path && "bg-primary/5 border-primary/20"
                         )}
-                        onClick={() => navigateToDirectory(directory)}
+                        onClick={() => selectDirectory(directory)}
+                        onDoubleClick={() => navigateToDirectory(directory)}
                       >
                         <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -243,7 +319,7 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
                           </div>
                         </div>
                         <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                          Click to open
+                          Double-click to open
                         </div>
                       </div>
                     ))}

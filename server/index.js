@@ -45,6 +45,7 @@ import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSe
 import authRoutes from './routes/auth.js';
 import cursorRoutes from './routes/cursor.js';
 import gitRoutes from './routes/git.js';
+import githubRoutes from './routes/github.js';
 import mcpRoutes from './routes/mcp.js';
 
 // File system watcher for projects folder
@@ -206,6 +207,9 @@ app.use('/api/auth', authRoutes);
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
+// GitHub API Routes (protected)
+app.use('/api/github', githubRoutes);
+
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
 
@@ -317,6 +321,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Project path is required' });
         }
 
+        console.log('🔍 Creating project with path:', projectPath);
         const project = await addProjectManually(projectPath.trim());
         res.json({ success: true, project });
     } catch (error) {
@@ -484,17 +489,30 @@ app.get('/api/directories', authenticateToken, async (req, res) => {
     try {
         const { path: requestedPath } = req.query;
         
+        console.log('📁 Directory request for path:', requestedPath);
+        
         // Default to user's home directory if no path provided
         // Handle ~ expansion
         let resolvedPath = requestedPath;
-        if (requestedPath && requestedPath.startsWith('~')) {
+        if (!requestedPath || requestedPath === '~') {
+            resolvedPath = os.homedir();
+        } else if (requestedPath && requestedPath.startsWith('~')) {
             resolvedPath = requestedPath.replace('~', os.homedir());
         }
+        
         const targetPath = resolvedPath ? path.resolve(resolvedPath) : os.homedir();
+        console.log('📁 Resolved to target path:', targetPath);
         
         // Security check - ensure path is within reasonable bounds
-        if (!targetPath.startsWith('/Users') && !targetPath.startsWith('/home') && !targetPath.startsWith('C:\\Users')) {
-            return res.status(403).json({ error: 'Access denied to this directory' });
+        // Allow any path that exists, but log a warning for unusual paths
+        const isCommonPath = targetPath.startsWith('/Users') || 
+                            targetPath.startsWith('/home') || 
+                            targetPath.startsWith('/root') ||
+                            targetPath.startsWith('C:\\Users') ||
+                            targetPath.includes('/dev'); // Allow ~/dev paths
+                            
+        if (!isCommonPath) {
+            console.warn('⚠️ Accessing non-standard path:', targetPath);
         }
         
         try {
@@ -512,10 +530,7 @@ app.get('/api/directories', authenticateToken, async (req, res) => {
             
             // Add parent directory option if not at root
             const parentPath = path.dirname(targetPath);
-            const canGoUp = parentPath !== targetPath && 
-                           (parentPath.startsWith('/Users') || 
-                            parentPath.startsWith('/home') || 
-                            parentPath.startsWith('C:\\Users'));
+            const canGoUp = parentPath !== targetPath; // Allow going up from any directory
             
             res.json({
                 currentPath: targetPath,
@@ -524,10 +539,11 @@ app.get('/api/directories', authenticateToken, async (req, res) => {
             });
             
         } catch (error) {
+            console.error('📁 Error reading directory:', targetPath, error.code, error.message);
             if (error.code === 'EACCES') {
-                res.status(403).json({ error: 'Permission denied' });
+                res.status(403).json({ error: `Permission denied: ${targetPath}` });
             } else if (error.code === 'ENOENT') {
-                res.status(404).json({ error: 'Directory not found' });
+                res.status(404).json({ error: `Directory not found: ${targetPath}` });
             } else {
                 throw error;
             }

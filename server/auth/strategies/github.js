@@ -32,9 +32,10 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
       const existingUser = await userDb.getUserByGithubId(profile.id);
       
       if (existingUser) {
-        // Update last login
+        // Update last login and access token
         await userDb.updateUserLastLogin(existingUser.id);
-        return done(null, existingUser);
+        await userDb.updateGithubAccessToken(existingUser.id, accessToken);
+        return done(null, { ...existingUser, github_access_token: accessToken });
       }
 
       // Create new user
@@ -42,6 +43,7 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
         username: profile.username,
         github_id: profile.id,
         github_username: profile.username,
+        github_access_token: accessToken,
         email: profile.emails && profile.emails[0] ? profile.emails[0].value : null,
         avatar_url: profile.photos && profile.photos[0] ? profile.photos[0].value : null
       });

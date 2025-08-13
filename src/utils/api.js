@@ -21,6 +21,8 @@ export const authenticatedFetch = (url, options = {}) => {
 
 // API endpoints
 export const api = {
+  // Generic fetch with auth
+  fetchWithAuth: authenticatedFetch,
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
