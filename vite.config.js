@@ -11,6 +11,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     server: {
+<<<<<<< HEAD
       port: parseInt(env.VITE_PORT) || 3001,
       host: '0.0.0.0', // Allow external connections
       proxy: {
@@ -28,6 +29,18 @@ export default defineConfig(({ command, mode }) => {
           target: `ws://localhost:${serverPort}`,
           ws: true,
           changeOrigin: true
+=======
+      port: parseInt(env.VITE_PORT) || 5173,
+      proxy: {
+        '/api': `http://localhost:${env.PORT || 3001}`,
+        '/ws': {
+          target: `ws://localhost:${env.PORT || 3001}`,
+          ws: true
+        },
+        '/shell': {
+          target: `ws://localhost:${env.PORT || 3002}`,
+          ws: true
+>>>>>>> upstream/main
         }
       }
     },

@@ -2,7 +2,14 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
+<<<<<<< HEAD
 import { getSession, getSessionsForProject, invalidateCacheForProject } from './sessions.js';
+=======
+import crypto from 'crypto';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+import os from 'os';
+>>>>>>> upstream/main
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
@@ -68,13 +75,8 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   // If it starts with /, it's an absolute path
   if (projectPath.startsWith('/')) {
     const parts = projectPath.split('/').filter(Boolean);
-    if (parts.length > 3) {
-      // Show last 2 folders with ellipsis: "...projects/myapp"
-      return `.../${parts.slice(-2).join('/')}`;
-    } else {
-      // Show full path if short: "/home/user"
-      return projectPath;
-    }
+    // Return only the last folder name
+    return parts[parts.length - 1] || projectPath;
   }
   
   return projectPath;
@@ -335,6 +337,19 @@ async function getProjects() {
           
           projects.push(project);
         }
+<<<<<<< HEAD
+=======
+        
+        // Also fetch Cursor sessions for this project
+        try {
+          project.cursorSessions = await getCursorSessions(actualProjectDir);
+        } catch (e) {
+          console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
+          project.cursorSessions = [];
+        }
+        
+        projects.push(project);
+>>>>>>> upstream/main
       }
     }
   } catch (error) {
@@ -356,6 +371,7 @@ async function getProjects() {
         }
       }
       
+<<<<<<< HEAD
       const project = {
         name: projectName,
         path: actualProjectDir,
@@ -365,6 +381,25 @@ async function getProjects() {
         isManuallyAdded: true,
         sessions: []
       };
+=======
+              const project = {
+          name: projectName,
+          path: actualProjectDir,
+          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
+          fullPath: actualProjectDir,
+          isCustomName: !!projectConfig.displayName,
+          isManuallyAdded: true,
+          sessions: [],
+          cursorSessions: []
+        };
+>>>>>>> upstream/main
+      
+      // Try to fetch Cursor sessions for manual projects too
+      try {
+        project.cursorSessions = await getCursorSessions(actualProjectDir);
+      } catch (e) {
+        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
+      }
       
       projects.push(project);
     }
@@ -393,13 +428,150 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   }
 }
 
+<<<<<<< HEAD
 // Get messages for a specific session
 async function getSessionMessages(projectName, sessionId) {
   try {
     return await getSession(projectName, sessionId);
+=======
+async function parseJsonlSessions(filePath) {
+  const sessions = new Map();
+  
+  try {
+    const fileStream = fsSync.createReadStream(filePath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+    
+    // console.log(`[JSONL Parser] Reading file: ${filePath}`);
+    let lineCount = 0;
+    
+    for await (const line of rl) {
+      if (line.trim()) {
+        lineCount++;
+        try {
+          const entry = JSON.parse(line);
+          
+          if (entry.sessionId) {
+            if (!sessions.has(entry.sessionId)) {
+              sessions.set(entry.sessionId, {
+                id: entry.sessionId,
+                summary: 'New Session',
+                messageCount: 0,
+                lastActivity: new Date(),
+                cwd: entry.cwd || ''
+              });
+            }
+            
+            const session = sessions.get(entry.sessionId);
+            
+            // Update summary if this is a summary entry
+            if (entry.type === 'summary' && entry.summary) {
+              session.summary = entry.summary;
+            } else if (entry.message?.role === 'user' && entry.message?.content && session.summary === 'New Session') {
+              // Use first user message as summary if no summary entry exists
+              const content = entry.message.content;
+              if (typeof content === 'string' && content.length > 0) {
+                // Skip command messages that start with <command-name>
+                if (!content.startsWith('<command-name>')) {
+                  session.summary = content.length > 50 ? content.substring(0, 50) + '...' : content;
+                }
+              }
+            }
+            
+            // Count messages instead of storing them all
+            session.messageCount = (session.messageCount || 0) + 1;
+            
+            // Update last activity
+            if (entry.timestamp) {
+              session.lastActivity = new Date(entry.timestamp);
+            }
+          }
+        } catch (parseError) {
+          console.warn(`[JSONL Parser] Error parsing line ${lineCount}:`, parseError.message);
+        }
+      }
+    }
+    
+    // console.log(`[JSONL Parser] Processed ${lineCount} lines, found ${sessions.size} sessions`);
+  } catch (error) {
+    console.error('Error reading JSONL file:', error);
+  }
+  
+  // Convert Map to Array and sort by last activity
+  return Array.from(sessions.values()).sort((a, b) => 
+    new Date(b.lastActivity) - new Date(a.lastActivity)
+  );
+}
+
+// Get messages for a specific session with pagination support
+async function getSessionMessages(projectName, sessionId, limit = null, offset = 0) {
+  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  
+  try {
+    const files = await fs.readdir(projectDir);
+    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    
+    if (jsonlFiles.length === 0) {
+      return { messages: [], total: 0, hasMore: false };
+    }
+    
+    const messages = [];
+    
+    // Process all JSONL files to find messages for this session
+    for (const file of jsonlFiles) {
+      const jsonlFile = path.join(projectDir, file);
+      const fileStream = fsSync.createReadStream(jsonlFile);
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+      });
+      
+      for await (const line of rl) {
+        if (line.trim()) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.sessionId === sessionId) {
+              messages.push(entry);
+            }
+          } catch (parseError) {
+            console.warn('Error parsing line:', parseError.message);
+          }
+        }
+      }
+    }
+    
+    // Sort messages by timestamp
+    const sortedMessages = messages.sort((a, b) => 
+      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+    );
+    
+    const total = sortedMessages.length;
+    
+    // If no limit is specified, return all messages (backward compatibility)
+    if (limit === null) {
+      return sortedMessages;
+    }
+    
+    // Apply pagination - for recent messages, we need to slice from the end
+    // offset 0 should give us the most recent messages
+    const startIndex = Math.max(0, total - offset - limit);
+    const endIndex = total - offset;
+    const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
+    const hasMore = startIndex > 0;
+    
+    return {
+      messages: paginatedMessages,
+      total,
+      hasMore,
+      offset,
+      limit
+    };
+>>>>>>> upstream/main
   } catch (error) {
     console.error(`Error reading messages for session ${sessionId}:`, error);
-    return [];
+    return limit === null ? [] : { messages: [], total: 0, hasMore: false };
   }
 }
 
@@ -580,6 +752,117 @@ async function addProjectManually(projectPath, displayName = null) {
     isManuallyAdded: true,
     sessions: []
   };
+}
+
+// Fetch Cursor sessions for a given project path
+async function getCursorSessions(projectPath) {
+  try {
+    // Calculate cwdID hash for the project path (Cursor uses MD5 hash)
+    const cwdId = crypto.createHash('md5').update(projectPath).digest('hex');
+    const cursorChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
+    
+    // Check if the directory exists
+    try {
+      await fs.access(cursorChatsPath);
+    } catch (error) {
+      // No sessions for this project
+      return [];
+    }
+    
+    // List all session directories
+    const sessionDirs = await fs.readdir(cursorChatsPath);
+    const sessions = [];
+    
+    for (const sessionId of sessionDirs) {
+      const sessionPath = path.join(cursorChatsPath, sessionId);
+      const storeDbPath = path.join(sessionPath, 'store.db');
+      
+      try {
+        // Check if store.db exists
+        await fs.access(storeDbPath);
+        
+        // Capture store.db mtime as a reliable fallback timestamp
+        let dbStatMtimeMs = null;
+        try {
+          const stat = await fs.stat(storeDbPath);
+          dbStatMtimeMs = stat.mtimeMs;
+        } catch (_) {}
+
+        // Open SQLite database
+        const db = await open({
+          filename: storeDbPath,
+          driver: sqlite3.Database,
+          mode: sqlite3.OPEN_READONLY
+        });
+        
+        // Get metadata from meta table
+        const metaRows = await db.all(`
+          SELECT key, value FROM meta
+        `);
+        
+        // Parse metadata
+        let metadata = {};
+        for (const row of metaRows) {
+          if (row.value) {
+            try {
+              // Try to decode as hex-encoded JSON
+              const hexMatch = row.value.toString().match(/^[0-9a-fA-F]+$/);
+              if (hexMatch) {
+                const jsonStr = Buffer.from(row.value, 'hex').toString('utf8');
+                metadata[row.key] = JSON.parse(jsonStr);
+              } else {
+                metadata[row.key] = row.value.toString();
+              }
+            } catch (e) {
+              metadata[row.key] = row.value.toString();
+            }
+          }
+        }
+        
+        // Get message count
+        const messageCountResult = await db.get(`
+          SELECT COUNT(*) as count FROM blobs
+        `);
+        
+        await db.close();
+        
+        // Extract session info
+        const sessionName = metadata.title || metadata.sessionTitle || 'Untitled Session';
+        
+        // Determine timestamp - prefer createdAt from metadata, fall back to db file mtime
+        let createdAt = null;
+        if (metadata.createdAt) {
+          createdAt = new Date(metadata.createdAt).toISOString();
+        } else if (dbStatMtimeMs) {
+          createdAt = new Date(dbStatMtimeMs).toISOString();
+        } else {
+          createdAt = new Date().toISOString();
+        }
+        
+        sessions.push({
+          id: sessionId,
+          name: sessionName,
+          createdAt: createdAt,
+          lastActivity: createdAt, // For compatibility with Claude sessions
+          messageCount: messageCountResult.count || 0,
+          projectPath: projectPath
+        });
+        
+      } catch (error) {
+        console.warn(`Could not read Cursor session ${sessionId}:`, error.message);
+      }
+    }
+    
+    // Sort sessions by creation time (newest first)
+    sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // Return only the first 5 sessions for performance
+    return sessions.slice(0, 5);
+    
+  } catch (error) {
+    console.error('Error fetching Cursor sessions:', error);
+    return [];
+  }
 }
 
 
