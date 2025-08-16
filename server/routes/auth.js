@@ -28,9 +28,46 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// Local registration and login are disabled - use GitHub OAuth instead
-// router.post('/register', ...) - removed
-// router.post('/login', ...) - removed
+// Local login endpoint (kept for existing users)
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    
+    // Find user
+    const user = await userDb.findByUsername(username);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    // Verify password
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    // Generate token
+    const token = generateToken(user);
+    
+    // Update last login
+    userDb.updateUserLastLogin(user.id);
+    
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        auth_provider: user.auth_provider || 'local'
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Get current user (protected route)
 router.get('/user', authenticateToken, (req, res) => {
@@ -87,10 +124,13 @@ router.get('/github/check/:username', (req, res) => {
 
 // Get GitHub authentication status
 router.get('/github/status', authenticateToken, (req, res) => {
-  res.json({
+  console.log('GitHub status check for user:', req.user);
+  const response = {
     isGithubAuthenticated: req.user.auth_provider === 'github',
     githubUsername: req.user.github_username || null
-  });
+  };
+  console.log('GitHub status response:', response);
+  res.json(response);
 });
 
 export default router;

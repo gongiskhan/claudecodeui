@@ -14,7 +14,8 @@ try {
     const trimmedLine = line.trim();
     if (trimmedLine && !trimmedLine.startsWith('#')) {
       const [key, ...valueParts] = trimmedLine.split('=');
-      if (key && valueParts.length > 0 && !process.env[key]) {
+      if (key && valueParts.length > 0) {
+        // Always override with .env values
         process.env[key] = valueParts.join('=').trim();
       }
     }

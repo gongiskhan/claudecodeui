@@ -16,6 +16,7 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
   const [manualPath, setManualPath] = useState('');
   const [showGitHubSelector, setShowGitHubSelector] = useState(false);
   const [isGitHubAuthenticated, setIsGitHubAuthenticated] = useState(false);
+  const [isGitHubConfigured, setIsGitHubConfigured] = useState(false);
 
   // Detect OS and get appropriate home directory path
   const getDefaultPath = () => {
@@ -38,8 +39,8 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
         loadDirectories(projectParent);
         setInitialLoad(false);
         
-        // Check GitHub authentication status
-        checkGitHubAuth();
+        // Check GitHub configuration and authentication status
+        checkGitHubStatus();
       }
     }
   }, [isOpen]);
@@ -51,15 +52,35 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
     }
   }, [currentPath]);
 
-  const checkGitHubAuth = async () => {
+  const checkGitHubStatus = async () => {
     try {
-      const response = await api.fetchWithAuth('/api/auth/github/status');
-      if (response.ok) {
-        const data = await response.json();
-        setIsGitHubAuthenticated(data.isGitHubAuthenticated);
+      // First check if GitHub is configured
+      const statusResponse = await api.auth.status();
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json();
+        console.log('GitHub configured:', statusData.githubConfigured);
+        setIsGitHubConfigured(statusData.githubConfigured);
+      }
+      
+      // Then check if current user is GitHub authenticated
+      const authResponse = await api.fetchWithAuth('/api/auth/github/status');
+      console.log('GitHub status response:', authResponse.status, authResponse.ok);
+      if (authResponse.ok) {
+        const authData = await authResponse.json();
+        console.log('GitHub auth data:', authData);
+        console.log('GitHub authenticated:', authData.isGithubAuthenticated);
+        setIsGitHubAuthenticated(authData.isGithubAuthenticated);
+      } else {
+        console.error('Failed to get GitHub status:', authResponse.status);
+        try {
+          const errorData = await authResponse.json();
+          console.error('Error data:', errorData);
+        } catch (e) {
+          console.error('Could not parse error response');
+        }
       }
     } catch (error) {
-      console.error('Error checking GitHub auth:', error);
+      console.error('Error checking GitHub status:', error);
     }
   };
 
@@ -178,17 +199,27 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
 
         {/* Navigation Bar */}
         <div className="flex flex-col gap-2 p-3 border-b border-border bg-muted/30">
-          {/* GitHub Clone Option */}
-          {isGitHubAuthenticated && (
+          {/* GitHub Clone Option - Show if GitHub OAuth is configured */}
+          {isGitHubConfigured && (
             <div className="flex items-center gap-2 mb-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowGitHubSelector(true)}
+                onClick={() => {
+                  console.log('GitHub button clicked. isGitHubAuthenticated:', isGitHubAuthenticated);
+                  if (!isGitHubAuthenticated) {
+                    // Redirect to GitHub OAuth if not authenticated with GitHub
+                    console.log('Redirecting to GitHub OAuth...');
+                    window.location.href = '/api/auth/github?returnUrl=' + encodeURIComponent(window.location.pathname);
+                  } else {
+                    console.log('Showing GitHub selector...');
+                    setShowGitHubSelector(true);
+                  }
+                }}
                 className="h-8 px-3 w-full"
               >
                 <Github className="w-3 h-3 mr-2" />
-                Clone from GitHub
+                {!isGitHubAuthenticated ? 'Sign in with GitHub to Clone' : 'Clone from GitHub'}
               </Button>
             </div>
           )}

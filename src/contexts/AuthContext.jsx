@@ -50,11 +50,6 @@ export const AuthProvider = ({ children }) => {
       
       // Pass token directly to avoid state timing issues
       checkAuthStatus(urlToken);
-      
-      // Force reload after a short delay to ensure proper state update
-      setTimeout(() => {
-        window.location.reload();
-      }, 100);
     } else {
       checkAuthStatus();
     }
@@ -81,14 +76,17 @@ export const AuthProvider = ({ children }) => {
       // If we have a token, verify it
       if (authToken) {
         try {
+          console.log('Verifying token:', authToken.substring(0, 20) + '...');
           const userResponse = await api.auth.user();
           
           if (userResponse.ok) {
             const userData = await userResponse.json();
+            console.log('User authenticated:', userData.user);
             setUser(userData.user);
             setNeedsSetup(false);
           } else {
             // Token is invalid
+            console.error('Token verification failed - response not ok:', userResponse.status);
             localStorage.removeItem('auth-token');
             setToken(null);
             setUser(null);
@@ -99,6 +97,8 @@ export const AuthProvider = ({ children }) => {
           setToken(null);
           setUser(null);
         }
+      } else {
+        console.log('No auth token found');
       }
     } catch (error) {
       console.error('Auth status check failed:', error);
@@ -110,16 +110,22 @@ export const AuthProvider = ({ children }) => {
 
 
   const logout = () => {
+    // Clear the token and user state
+    const currentToken = token;
     setToken(null);
     setUser(null);
     localStorage.removeItem('auth-token');
     
     // Optional: Call logout endpoint for logging
-    if (token) {
+    if (currentToken) {
       api.auth.logout().catch(error => {
         console.error('Logout endpoint error:', error);
       });
     }
+    
+    // Force a page reload to ensure clean state
+    // This will trigger the auth check and show the login form
+    window.location.href = '/';
   };
 
   const value = {

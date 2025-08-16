@@ -4,12 +4,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Search, GitBranch } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Search, GitBranch, User, LogOut } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import CursorLogo from './CursorLogo.jsx';
 import { api } from '../utils/api';
 import ProjectPickerModal from './ProjectPickerModal';
+import { useAuth } from '../contexts/AuthContext';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
 const formatTimeAgo = (dateString, currentTime) => {
@@ -72,6 +73,9 @@ function Sidebar({
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
   const [creatingWorktree, setCreatingWorktree] = useState({});
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  const { user, logout } = useAuth();
 
   // Touch handler to prevent double-tap issues on iPad (only for buttons, not scroll areas)
   const handleTouchClick = (callback) => {
@@ -543,6 +547,48 @@ function Sidebar({
             >
               <FolderPlus className="w-4 h-4" />
             </Button>
+            
+            {/* User Menu */}
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 px-0 hover:bg-accent transition-all duration-200"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                title="User menu"
+              >
+                <User className="w-4 h-4" />
+              </Button>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-lg z-50">
+                  {user && (
+                    <>
+                      <div className="px-3 py-2 border-b border-border">
+                        <div className="text-sm font-medium text-foreground">
+                          {user.github_username || user.username}
+                        </div>
+                        {user.email && (
+                          <div className="text-xs text-muted-foreground">
+                            {user.email}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+                        onClick={() => {
+                          logout();
+                          setShowUserMenu(false);
+                        }}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         

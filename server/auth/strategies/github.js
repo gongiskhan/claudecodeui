@@ -14,10 +14,13 @@ const isAllowedUser = (githubUsername) => {
 // Only initialize GitHub strategy if credentials are provided
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
   console.log('🔐 Registering GitHub OAuth strategy');
+  // Force correct callback URL for now
+  const callbackURL = 'http://100.78.142.56:4567/api/auth/github/callback';
+  console.log('GitHub Callback URL:', callbackURL);
   passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: process.env.GITHUB_CALLBACK_URL
+    callbackURL: callbackURL
   },
   async (accessToken, refreshToken, profile, done) => {
     try {

@@ -20,6 +20,25 @@ const initializeDatabase = async () => {
     const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
     db.exec(initSQL);
     console.log('Database initialized successfully');
+    
+    // Run migrations
+    const migrationsDir = path.join(__dirname, 'migrations');
+    if (fs.existsSync(migrationsDir)) {
+      const migrationFiles = fs.readdirSync(migrationsDir)
+        .filter(file => file.endsWith('.sql'))
+        .sort(); // Ensure migrations run in order
+      
+      for (const file of migrationFiles) {
+        try {
+          const migrationSQL = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+          db.exec(migrationSQL);
+          console.log(`✅ Applied migration: ${file}`);
+        } catch (migrationError) {
+          // If migration fails, it might already be applied
+          console.log(`⚠️ Migration ${file} may already be applied: ${migrationError.message}`);
+        }
+      }
+    }
   } catch (error) {
     console.error('Error initializing database:', error.message);
     throw error;
