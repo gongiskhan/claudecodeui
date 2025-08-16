@@ -89,7 +89,7 @@ router.get('/github', (req, res, next) => {
   if (req.query.returnUrl) {
     req.session.returnUrl = req.query.returnUrl;
   }
-  passport.authenticate('github', { scope: ['user:email'] })(req, res, next);
+  passport.authenticate('github', { scope: ['user:email', 'repo', 'read:org'] })(req, res, next);
 });
 
 router.get('/github/callback', 
