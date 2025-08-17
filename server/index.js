@@ -26,7 +26,7 @@ import { abortCursorSession, spawnCursor } from './cursor-cli.js';
 import { initializeDatabase } from './database/db.js';
 import ExtensionManager from './extensions/manager.js';
 import { authenticateToken, authenticateWebSocket, validateApiKey } from './middleware/auth.js';
-import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSession, extractProjectDirectory, getProjects, getSessionMessages, getSessions, renameProject } from './projects.js';
+import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSession, extractProjectDirectory, getProjects, getSessionMessages, getSessions, removeProjectFromBrowser, renameProject } from './projects.js';
 import authRoutes from './routes/auth.js';
 import cursorRoutes from './routes/cursor.js';
 import gitRoutes from './routes/git.js';
@@ -305,6 +305,17 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
     try {
         const { projectName } = req.params;
         await deleteProject(projectName);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Remove project from browser (without deleting files)
+app.delete('/api/projects/:projectName/remove', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        await removeProjectFromBrowser(projectName);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
