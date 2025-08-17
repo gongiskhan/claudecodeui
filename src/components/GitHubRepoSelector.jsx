@@ -183,7 +183,7 @@ function GitHubRepoSelector({ onSelectRepo, onBack }) {
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[80vh]">
+    <div className="flex flex-col h-full max-h-[80vh] relative">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border flex-shrink-0">
         <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -259,7 +259,10 @@ function GitHubRepoSelector({ onSelectRepo, onBack }) {
       </div>
 
       {/* Repository List - Fixed height with scroll */}
-      <div className="flex-1 overflow-y-auto p-2 min-h-0">
+      <div className="overflow-y-auto p-2" style={{ 
+        maxHeight: selectedRepo ? 'calc(100vh - 450px)' : 'calc(100vh - 300px)',
+        minHeight: '200px'
+      }}>
         {loadingRepos ? (
           <div className="text-center py-8">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
@@ -341,7 +344,7 @@ function GitHubRepoSelector({ onSelectRepo, onBack }) {
 
       {/* Clone Section - Fixed at bottom */}
       {selectedRepo && (
-        <div className="p-4 border-t border-border bg-background/95 backdrop-blur-sm flex-shrink-0">
+        <div className="p-4 border-t border-border bg-background/95 backdrop-blur-sm flex-shrink-0 sticky bottom-0">
           <div className="space-y-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">Clone to:</label>
@@ -353,12 +356,12 @@ function GitHubRepoSelector({ onSelectRepo, onBack }) {
                 placeholder="Enter target directory path..."
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 size="sm"
                 onClick={handleClone}
                 disabled={cloning || !clonePath}
-                className="flex-1"
+                className="flex-1 w-full sm:w-auto"
               >
                 {cloning ? (
                   <>
@@ -374,6 +377,7 @@ function GitHubRepoSelector({ onSelectRepo, onBack }) {
                 variant="outline"
                 onClick={onBack}
                 disabled={cloning}
+                className="w-full sm:w-auto"
               >
                 Cancel
               </Button>

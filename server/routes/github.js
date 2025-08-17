@@ -43,34 +43,24 @@ router.get('/repos', authenticateToken, async (req, res) => {
         type: 'all'
       });
     } else {
-      // Fetch all user repositories using automatic pagination
+      // Fetch ALL repositories user has access to (owned + organizations)
       console.log('Fetching all user repositories...');
       
-      // First get repos where user is owner
-      const ownedRepos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
+      allRepos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
         per_page: 100,
-        type: 'owner',
+        type: 'all',
         sort: 'updated',
         direction: 'desc'
       });
-      console.log(`Fetched ${ownedRepos.length} owned repositories`);
       
-      // Then get repos from organizations
-      const orgRepos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
-        per_page: 100,
-        type: 'member',
-        sort: 'updated',
-        direction: 'desc'
+      // Log breakdown of repositories by owner
+      const ownerCounts = {};
+      allRepos.forEach(repo => {
+        const owner = repo.owner.login;
+        ownerCounts[owner] = (ownerCounts[owner] || 0) + 1;
       });
-      console.log(`Fetched ${orgRepos.length} organization repositories`);
-      
-      // Combine and deduplicate
-      const repoMap = new Map();
-      [...ownedRepos, ...orgRepos].forEach(repo => {
-        repoMap.set(repo.id, repo);
-      });
-      
-      allRepos = Array.from(repoMap.values());
+      console.log(`Fetched ${allRepos.length} total repositories`);
+      console.log('Repository breakdown by owner:', ownerCounts);
     }
 
     console.log(`Fetched ${allRepos.length} repositories`);
@@ -121,10 +111,12 @@ router.get('/orgs', authenticateToken, async (req, res) => {
       auth: accessToken
     });
 
-    // Fetch user's organizations
-    const { data: orgs } = await octokit.orgs.listForAuthenticatedUser({
+    // Fetch ALL user's organizations using pagination
+    const orgs = await octokit.paginate(octokit.orgs.listForAuthenticatedUser, {
       per_page: 100
     });
+    
+    console.log(`Fetched ${orgs.length} organizations:`, orgs.map(o => o.login));
 
     // Format the organization data
     const formattedOrgs = orgs.map(org => ({

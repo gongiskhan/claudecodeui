@@ -136,6 +136,11 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
     navigateToPath(directory.path);
   };
 
+  // Detect if device is touch-enabled
+  const isTouchDevice = () => {
+    return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  };
+
   const handleSelectProject = () => {
     if (selectedPath) {
       onSelectProject(selectedPath);
@@ -334,11 +339,24 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
                       <div
                         key={directory.path}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer hover:bg-accent/50",
+                          "group flex items-center gap-3 p-3 rounded-lg border border-transparent transition-all cursor-pointer hover:bg-accent/50",
                           selectedPath === directory.path && "bg-primary/5 border-primary/20"
                         )}
-                        onClick={() => selectDirectory(directory)}
-                        onDoubleClick={() => navigateToDirectory(directory)}
+                        onClick={() => {
+                          if (isTouchDevice()) {
+                            // On touch devices, single tap navigates into directory
+                            navigateToDirectory(directory);
+                          } else {
+                            // On desktop, single click selects
+                            selectDirectory(directory);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (!isTouchDevice()) {
+                            // Only use double-click on non-touch devices
+                            navigateToDirectory(directory);
+                          }
+                        }}
                       >
                         <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -349,9 +367,25 @@ function ProjectPickerModal({ isOpen, onClose, onSelectProject }) {
                             {directory.path}
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                          Double-click to open
-                        </div>
+                        {!isTouchDevice() && (
+                          <div className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                            Double-click to open
+                          </div>
+                        )}
+                        {isTouchDevice() && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectDirectory(directory);
+                              handleSelectProject();
+                            }}
+                            className="ml-auto"
+                          >
+                            Select
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
