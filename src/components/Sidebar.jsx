@@ -719,10 +719,14 @@ function Sidebar({
                           isSelected && "bg-primary/5 border-primary/20"
                         )}
                         onClick={() => {
-                          // On mobile, just toggle the folder - don't select the project
+                          // On mobile, select the project AND toggle the folder
+                          onProjectSelect(project);
                           toggleProject(project.name);
                         }}
-                        onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
+                        onTouchEnd={handleTouchClick(() => {
+                          onProjectSelect(project);
+                          toggleProject(project.name);
+                        })}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
