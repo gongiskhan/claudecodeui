@@ -1374,7 +1374,12 @@ function Sidebar({
         <div className="md:hidden p-4 pb-20 border-t border-border/50" style={{ display: (isMobile === true) ? 'block' : 'none' }}>
           <button
             className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
-            onClick={onShowSettings}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onShowSettings();
+            }}
+            onTouchEnd={handleTouchClick(() => onShowSettings())}
           >
             <div className="w-10 h-10 rounded-2xl bg-background/80 flex items-center justify-center">
               <Settings className="w-5 h-5 text-muted-foreground" />
