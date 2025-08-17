@@ -30,6 +30,7 @@ import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSe
 import authRoutes from './routes/auth.js';
 import commandRoutes from './routes/commands.js';
 import cursorRoutes from './routes/cursor.js';
+import extensionRoutes from './routes/extensions.js';
 import gitRoutes from './routes/git.js';
 import githubRoutes from './routes/github.js';
 import hookRoutes from './routes/hooks.js';
@@ -222,6 +223,9 @@ app.use('/api/v1/hooks', authenticateToken, hookRoutes);
 
 // Command routes (protected)
 app.use('/api/v1/commands', authenticateToken, commandRoutes);
+
+// Extension routes (protected)
+app.use('/api/v1/extensions', authenticateToken, extensionRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));

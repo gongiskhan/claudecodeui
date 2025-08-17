@@ -1896,7 +1896,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         // Only clear messages if this is NOT a system-initiated session change AND we're not loading
         // During system session changes or while loading, preserve the chat messages
-        if (!isSystemSessionChange && !isLoading) {
+        if (!isSystemSessionChange && !isLoadingSessionMessages) {
           setChatMessages([]);
           setSessionMessages([]);
         }
