@@ -14,6 +14,17 @@ function clearProjectDirectoryCache() {
   cacheTimestamp = Date.now();
 }
 
+// Helper function to decode project names that are encoded paths
+function decodeProjectPath(projectName) {
+  // If it starts with a dash, it's an encoded path
+  if (projectName.startsWith('-')) {
+    // Remove leading dash and replace remaining dashes with slashes
+    return '/' + projectName.substring(1).replace(/-/g, '/');
+  }
+  // Otherwise, return as-is (it's a regular project name)
+  return projectName;
+}
+
 // Load project configuration file
 async function loadProjectConfig() {
   const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
@@ -35,7 +46,7 @@ async function saveProjectConfig(config) {
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
-  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
+  let projectPath = actualProjectDir || decodeProjectPath(projectName);
   
   // SPECIAL HANDLING FOR WORKTREES - NEVER use package.json for worktree display names
   // Check if this is a worktree path (contains '/worktrees/' and ends with version)
@@ -125,7 +136,7 @@ async function extractProjectDirectory(projectName) {
       if (accessError.code === 'ENOENT') {
         // Project directory doesn't exist, fall back to decoded project name
         console.warn(`Project directory not found for ${projectName}, using fallback path`);
-        extractedPath = projectName.replace(/-/g, '/');
+        extractedPath = decodeProjectPath(projectName);
         projectDirectoryCache.set(projectName, extractedPath);
         return extractedPath;
       }
@@ -137,7 +148,13 @@ async function extractProjectDirectory(projectName) {
     
     if (jsonlFiles.length === 0) {
       // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
+      // Only replace dashes with slashes if it starts with a dash (encoded path)
+      if (projectName.startsWith('-')) {
+        extractedPath = projectName.substring(1).replace(/-/g, '/');
+        extractedPath = '/' + extractedPath;
+      } else {
+        extractedPath = projectName;
+      }
     } else {
       // Process all JSONL files to collect cwd values
       for (const file of jsonlFiles) {
@@ -174,7 +191,7 @@ async function extractProjectDirectory(projectName) {
       // Determine the best cwd to use
       if (cwdCounts.size === 0) {
         // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
+        extractedPath = decodeProjectPath(projectName);
       } else if (cwdCounts.size === 1) {
         // Only one cwd, use it
         extractedPath = Array.from(cwdCounts.keys())[0];
@@ -198,7 +215,7 @@ async function extractProjectDirectory(projectName) {
         
         // Fallback (shouldn't reach here)
         if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
+          extractedPath = latestCwd || decodeProjectPath(projectName);
         }
       }
     }
@@ -211,7 +228,7 @@ async function extractProjectDirectory(projectName) {
   } catch (error) {
     console.error(`Error extracting project directory for ${projectName}:`, error);
     // Fall back to decoded project name
-    extractedPath = projectName.replace(/-/g, '/');
+    extractedPath = decodeProjectPath(projectName);
     
     // Cache the fallback result too
     projectDirectoryCache.set(projectName, extractedPath);
@@ -347,7 +364,7 @@ async function getProjects() {
           actualProjectDir = await extractProjectDirectory(projectName);
         } catch (error) {
           // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
+          actualProjectDir = decodeProjectPath(projectName);
         }
       }
       
