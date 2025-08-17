@@ -134,9 +134,17 @@ async function extractProjectDirectory(projectName) {
       await fs.access(projectDir);
     } catch (accessError) {
       if (accessError.code === 'ENOENT') {
-        // Project directory doesn't exist, fall back to decoded project name
-        console.warn(`Project directory not found for ${projectName}, using fallback path`);
-        extractedPath = decodeProjectPath(projectName);
+        // Project directory doesn't exist, check config for originalPath
+        console.warn(`Project directory not found for ${projectName}, checking config`);
+        const config = await loadProjectConfig();
+        if (config[projectName] && config[projectName].originalPath) {
+          extractedPath = config[projectName].originalPath;
+          console.log(`Using originalPath from config: ${extractedPath}`);
+        } else {
+          // Fall back to decoded project name
+          extractedPath = decodeProjectPath(projectName);
+          console.log(`Using decoded path: ${extractedPath}`);
+        }
         projectDirectoryCache.set(projectName, extractedPath);
         return extractedPath;
       }
@@ -147,13 +155,13 @@ async function extractProjectDirectory(projectName) {
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     
     if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
-      // Only replace dashes with slashes if it starts with a dash (encoded path)
-      if (projectName.startsWith('-')) {
-        extractedPath = projectName.substring(1).replace(/-/g, '/');
-        extractedPath = '/' + extractedPath;
+      // No sessions, check config first
+      const config = await loadProjectConfig();
+      if (config[projectName] && config[projectName].originalPath) {
+        extractedPath = config[projectName].originalPath;
       } else {
-        extractedPath = projectName;
+        // Fall back to decoded project name if no config
+        extractedPath = decodeProjectPath(projectName);
       }
     } else {
       // Process all JSONL files to collect cwd values
