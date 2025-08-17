@@ -28,9 +28,11 @@ import ExtensionManager from './extensions/manager.js';
 import { authenticateToken, authenticateWebSocket, validateApiKey } from './middleware/auth.js';
 import { addProjectManually, clearProjectDirectoryCache, deleteProject, deleteSession, extractProjectDirectory, getProjects, getSessionMessages, getSessions, removeProjectFromBrowser, renameProject } from './projects.js';
 import authRoutes from './routes/auth.js';
+import commandRoutes from './routes/commands.js';
 import cursorRoutes from './routes/cursor.js';
 import gitRoutes from './routes/git.js';
 import githubRoutes from './routes/github.js';
+import hookRoutes from './routes/hooks.js';
 import mcpRoutes from './routes/mcp.js';
 
 // File system watcher for projects folder
@@ -214,6 +216,12 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
+
+// Hook routes (protected)
+app.use('/api/v1/hooks', authenticateToken, hookRoutes);
+
+// Command routes (protected)
+app.use('/api/v1/commands', authenticateToken, commandRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));

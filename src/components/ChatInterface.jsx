@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useDropzone } from 'react-dropzone';
+import { MessageSquare } from 'lucide-react';
 import TodoList from './TodoList';
 import ClaudeLogo from './ClaudeLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
@@ -2983,8 +2984,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   if (!selectedProject) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500 dark:text-gray-400">
-          <p>Select a project to start chatting with Claude</p>
+        <div className="text-center text-gray-500 dark:text-gray-400 space-y-4">
+          <MessageSquare className="w-12 h-12 mx-auto opacity-50" />
+          <p className="text-lg font-medium">No project selected</p>
+          <p className="text-sm">Please select a project from the sidebar to start chatting</p>
+          {onMenuClick && (
+            <button
+              onClick={onMenuClick}
+              className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Open Project Sidebar
+            </button>
+          )}
         </div>
       </div>
     );

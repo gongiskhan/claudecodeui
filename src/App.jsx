@@ -590,11 +590,6 @@ function AppContent() {
               e.stopPropagation();
               setSidebarOpen(false);
             }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
           />
           <div 
             className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
