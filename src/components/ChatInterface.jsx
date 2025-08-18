@@ -3192,34 +3192,83 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               );
             })}
+            
+            {/* Show real-time processing status with details */}
+            {isCurrentSessionLoading && (
+              <div className="chat-message assistant">
+                <div className="w-full">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
+                      {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
+                        <CursorLogo className="w-full h-full" />
+                      ) : (
+                        <ClaudeLogo className="w-full h-full" />
+                      )}
+                    </div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}
+                    </div>
+                  </div>
+                  
+                  {/* Enhanced status display */}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center space-x-1">
+                          <div className="animate-pulse text-blue-600 dark:text-blue-400">●</div>
+                          <div className="animate-pulse text-blue-600 dark:text-blue-400" style={{ animationDelay: '0.2s' }}>●</div>
+                          <div className="animate-pulse text-blue-600 dark:text-blue-400" style={{ animationDelay: '0.4s' }}>●</div>
+                        </div>
+                        <span className="font-medium text-blue-900 dark:text-blue-100">
+                          {claudeStatus?.text || 'Processing'}
+                        </span>
+                      </div>
+                      {claudeStatus?.tokens > 0 && (
+                        <span className="text-sm text-blue-700 dark:text-blue-300">
+                          {claudeStatus.tokens.toLocaleString()} tokens
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Show what Claude is currently doing */}
+                    {chatMessages.length > 0 && (() => {
+                      const lastMessage = chatMessages[chatMessages.length - 1];
+                      if (lastMessage.isToolUse) {
+                        return (
+                          <div className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <span>Using tool: {lastMessage.toolName}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
+                    {/* Abort button */}
+                    {canAbortSession && (
+                      <button
+                        onClick={handleAbortSession}
+                        className="mt-3 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Stop Processing</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
         
-        {isCurrentSessionLoading && (
-          <div className="chat-message assistant">
-            <div className="w-full">
-              <div className="flex items-center space-x-3 mb-2">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
-                  {(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? (
-                    <CursorLogo className="w-full h-full" />
-                  ) : (
-                    <ClaudeLogo className="w-full h-full" />
-                  )}
-                </div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'claude') === 'cursor' ? 'Cursor' : 'Claude'}</div>
-                {/* Abort button removed - functionality not yet implemented at backend */}
-              </div>
-              <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
-                <div className="flex items-center space-x-1">
-                  <div className="animate-pulse">●</div>
-                  <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>●</div>
-                  <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>●</div>
-                  <span className="ml-2">Thinking...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Removed the old loading indicator - messages now show in real-time */}
         
         <div ref={messagesEndRef} />
       </div>
@@ -3229,12 +3278,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 ${
         isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-16 sm:pb-4 md:pb-6'
       }`}>
-        {/* Claude Working Status - positioned above the input form */}
-        <ClaudeStatus 
-          status={claudeStatus}
-          isLoading={isCurrentSessionLoading}
-          onAbort={handleAbortSession}
-        />
+        {/* Claude Working Status - removed, now showing inline with messages */}
         
         {/* Permission Mode Selector with scroll to bottom button - Above input, clickable for mobile */}
         <div className="max-w-4xl mx-auto mb-3">
